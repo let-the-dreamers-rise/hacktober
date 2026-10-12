@@ -1,0 +1,25 @@
+def fib(n):
+    return n if n < 2 else fib(n - 1) + fib(n - 2)
+
+class Counter:
+    def __init__(self, start):
+        self.count = start
+    def bump(self, by=1):
+        self.count += by
+        return self.count
+
+c = Counter(10)
+c.bump()
+c.bump(5)
+total = 0
+for i in range(10):
+    if i % 2 == 0:
+        total += i
+    elif i == 7:
+        total -= 1
+    else:
+        continue
+words = ["a", "b", "c"]
+squares = [x * x for x in range(5) if x > 1]
+name = "world"
+print(f"hello {name}", fib(10), c.count, total, len(words), squares)

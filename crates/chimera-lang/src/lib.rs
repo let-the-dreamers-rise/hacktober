@@ -30,6 +30,7 @@ pub mod ai;
 pub mod ast;
 pub mod bigint;
 pub mod builtins;
+pub mod convert;
 pub mod interp;
 pub mod lexer;
 pub mod ml;
@@ -215,6 +216,17 @@ impl Engine {
         self.interp.cur_file = saved;
         let r = r.and_then(|v| self.interp.flush_defers().map(|()| v));
         r.map(Some)
+    }
+
+    /// Translates a program into another language.
+    pub fn convert(
+        &mut self,
+        name: &str,
+        src: &str,
+        target: convert::Target,
+    ) -> Result<String, Error> {
+        let stmts = self.parse(name, src)?;
+        Ok(convert::convert(&stmts, src, target))
     }
 
     /// Parses `src` and returns the syntax tree (for `chimera explain`).
