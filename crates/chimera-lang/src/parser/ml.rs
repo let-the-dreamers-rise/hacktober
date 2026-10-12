@@ -18,15 +18,29 @@ use crate::symbol::Sym;
 
 /// Activation names accepted after a comma in a layer line.
 const ACTIVATIONS: &[&str] = &[
-    "relu", "sigmoid", "tanh", "softmax", "gelu", "leaky_relu", "elu", "linear", "identity", "swish",
-    "silu", "softplus",
+    "relu",
+    "sigmoid",
+    "tanh",
+    "softmax",
+    "gelu",
+    "leaky_relu",
+    "elu",
+    "linear",
+    "identity",
+    "swish",
+    "silu",
+    "softplus",
 ];
 
 impl Parser<'_> {
     /// `model Name` followed by a body.
     pub(crate) fn model_ahead(&self) -> bool {
         let n2 = self.nth(2);
-        n2.is_op(":") || n2.is_op("{") || matches!(n2.tok, Tok::Newline) || n2.is_word("is") || n2.is_word("do")
+        n2.is_op(":")
+            || n2.is_op("{")
+            || matches!(n2.tok, Tok::Newline)
+            || n2.is_word("is")
+            || n2.is_word("do")
     }
 
     pub(crate) fn model_decl(&mut self, h: Header) -> PResult<Stmt> {
@@ -70,7 +84,9 @@ impl Parser<'_> {
                     let t = self.bump();
                     let act = Expr::new(ExprKind::Str(w_to_rc(t.ident().unwrap_or(""))), t.span);
                     args.push(Arg::Named(Sym::new("activation"), act));
-                } else if self.peek().ident().is_some() && (self.nth_is_op(1, ":") || self.nth_is_op(1, "=")) {
+                } else if self.peek().ident().is_some()
+                    && (self.nth_is_op(1, ":") || self.nth_is_op(1, "="))
+                {
                     let (n, _) = self.expect_ident("")?;
                     self.bump();
                     let v = self.layer_value()?;
@@ -128,16 +144,24 @@ impl Parser<'_> {
         while self.same_line() && !self.at_op(";") {
             if self.eat_word("for") {
                 let n = self.expr_bp(bp::RANGE + 1)?;
-                if !(self.eat_word("epochs") || self.eat_word("epoch") || self.eat_word("iterations") || self.eat_word("steps")) {
+                if !(self.eat_word("epochs")
+                    || self.eat_word("epoch")
+                    || self.eat_word("iterations")
+                    || self.eat_word("steps"))
+                {
                     let span = self.peek().span;
                     return self.err(span, "expected `epochs` after the count");
                 }
                 options.push((opt("epochs"), n));
-            } else if matches!(self.peek().tok, Tok::Int(_)) && (self.nth_is_word(1, "epochs") || self.nth_is_word(1, "epoch")) {
+            } else if matches!(self.peek().tok, Tok::Int(_))
+                && (self.nth_is_word(1, "epochs") || self.nth_is_word(1, "epoch"))
+            {
                 let n = self.expr_bp(bp::RANGE + 1)?;
                 self.bump();
                 options.push((opt("epochs"), n));
-            } else if self.at_word("with") && self.nth_is_word(1, "learning") || self.at_word("learning") {
+            } else if self.at_word("with") && self.nth_is_word(1, "learning")
+                || self.at_word("learning")
+            {
                 self.eat_word("with");
                 self.bump();
                 self.expect_word("rate", "")?;
@@ -148,10 +172,14 @@ impl Parser<'_> {
                 self.eat_op("=");
                 self.eat_op(":");
                 options.push((opt("lr"), self.expr_bp(bp::RANGE + 1)?));
-            } else if self.eat_word("using") || self.eat_word("with") || self.eat_word("optimizer") {
+            } else if self.eat_word("using") || self.eat_word("with") || self.eat_word("optimizer")
+            {
                 let o = self.postfix_expr()?;
                 options.push((opt("optimizer"), name_to_str(o)));
-            } else if self.eat_word("minimizing") || self.eat_word("minimising") || self.eat_word("loss") {
+            } else if self.eat_word("minimizing")
+                || self.eat_word("minimising")
+                || self.eat_word("loss")
+            {
                 self.eat_op("=");
                 let l = self.postfix_expr()?;
                 options.push((opt("loss"), name_to_str(l)));
@@ -163,7 +191,11 @@ impl Parser<'_> {
                 self.eat_word("size");
                 self.eat_op("=");
                 options.push((opt("batch"), self.expr_bp(bp::RANGE + 1)?));
-            } else if self.eat_word("reporting") || self.eat_word("report") || self.eat_word("printing") || self.eat_word("logging") {
+            } else if self.eat_word("reporting")
+                || self.eat_word("report")
+                || self.eat_word("printing")
+                || self.eat_word("logging")
+            {
                 self.eat_word("every");
                 options.push((opt("report"), self.expr_bp(bp::RANGE + 1)?));
             } else if self.at_word("verbose") || self.at_word("verbosely") {

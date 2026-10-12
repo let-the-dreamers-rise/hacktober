@@ -1,0 +1,100 @@
+// C, C++, Java and C# side by side
+#include <stdio.h>
+#include <iostream>
+using namespace std;
+
+int square(int x) {
+    return x * x;
+}
+
+double average(int arr[], int n) {
+    int sum = 0;
+    for (int i = 0; i < n; i++) {
+        sum += arr[i];
+    }
+    return (double) sum / n;
+}
+
+struct Point {
+    int x;
+    int y;
+};
+
+int main() {
+    int values[] = {4, 8, 15, 16, 23, 42};
+    printf("square(7) = %d\n", square(7));
+    printf("average = %.2f\n", average(values, 6));
+    struct Point p = {3, 4};
+    printf("point (%d, %d)\n", p.x, p.y);
+    int i = 0;
+    do {
+        i += 3;
+    } while (i < 10);
+    printf("i = %d, ternary = %s\n", i, i > 10 ? "big" : "small");
+    char grade = 'B';
+    switch (grade) {
+        case 'A': printf("excellent\n"); break;
+        case 'B':
+        case 'C': printf("good\n"); break;
+        default: printf("hmm\n");
+    }
+    unsigned long long big = 1;
+    for (int k = 1; k <= 25; ++k) big *= k;
+    printf("25! = %llu\n", big);
+    cout << "C++ says " << square(9) << endl;
+    std::vector<int> v = {3, 1, 2};
+    v.push_back(0);
+    std::sort(v.begin(), v.end());
+    for (auto x : v) std::cout << x << " ";
+    std::cout << std::endl;
+    return 0;
+}
+
+public class Greeter {
+    private String name;
+    private static int created = 0;
+
+    public Greeter(String name) {
+        this.name = name;
+        created++;
+    }
+
+    public String greet() {
+        return "Hello, " + name + "!";
+    }
+
+    public static int getCreated() { return created; }
+}
+
+Greeter g = new Greeter("Java");
+System.out.println(g.greet());
+new Greeter("again");
+System.out.println("created: " + Greeter.getCreated());
+String s = String.format("%5.1f|%-4s|%03d", 3.14159, "ab", 7);
+System.out.println(s);
+StringBuilder sb = new StringBuilder();
+for (int j = 0; j < 3; j++) sb.append(j).append(",");
+System.out.println(sb.toString());
+ArrayList<Integer> list = new ArrayList<>();
+list.add(10); list.add(20);
+System.out.println(list.size() + " " + list.get(1) + " " + list.contains(10));
+HashMap<String, Integer> ages = new HashMap<>();
+ages.put("ann", 31);
+ages.put("bob", 27);
+for (String key : ages.keySet()) {
+    System.out.println(key + " -> " + ages.get(key));
+}
+int[] arr = new int[5];
+arr[2] = 7;
+System.out.println(Arrays.toString(arr) + " " + arr.length);
+try {
+    int[] small = new int[2];
+    small[5] = 1;
+} catch (ArrayIndexOutOfBoundsException e) {
+    System.out.println("caught: " + e.getMessage());
+}
+Console.WriteLine("C# says {0} and {1}", 1, "two");
+var nums = new List<int> { 5, 3, 9 };
+Console.WriteLine(nums.Where(n => n > 4).Select(n => n * 10).Sum());
+Console.WriteLine($"interpolated {nums.Count} items, max {nums.Max()}");
+main();

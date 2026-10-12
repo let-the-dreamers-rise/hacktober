@@ -8,10 +8,11 @@ use crate::symbol::Sym;
 
 /// Words treated as type names in C/Java/Go-style declarations.
 const TYPE_WORDS: &[&str] = &[
-    "int", "long", "short", "char", "byte", "float", "double", "bool", "boolean", "void",
-    "string", "auto", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128",
-    "isize", "usize", "f32", "f64", "uint", "ulong", "size_t", "decimal", "number", "any",
-    "str", "rune", "complex", "integer", "real", "object", "dynamic", "unit",
+    "int", "long", "short", "char", "byte", "float", "double", "bool", "boolean", "void", "string",
+    "auto", "i8", "i16", "i32", "i64", "i128", "u8", "u16", "u32", "u64", "u128", "isize", "usize",
+    "f32", "f64", "uint", "ulong", "size_t", "decimal", "number", "any", "str", "rune", "complex",
+    "integer", "real", "object", "dynamic", "unit", "int8", "int16", "int32", "int64", "uint8",
+    "uint16", "uint32", "uint64", "float32", "float64", "error",
 ];
 
 /// Whether `w` is a lowercase built-in type name (`int`, `f64`, `string`, …).
@@ -95,8 +96,12 @@ impl Parser<'_> {
                         _ => None,
                     };
                     rest = Some((items.len(), name));
+                } else if p.at_op(",") {
+                    // A hole: `[first, , third]`.
+                    items.push(Pattern::Wildcard);
                 } else {
-                    items.push(elem(p)?);
+                    let pat = elem(p)?;
+                    items.push(p.pattern_default(pat)?);
                 }
                 if !p.eat_op(",") {
                     break;
@@ -112,14 +117,16 @@ impl Parser<'_> {
         self.expect_op("{", "")?;
         self.nested(|p| {
             let mut entries = Vec::new();
+            let mut rest = None;
             loop {
                 p.skip_newlines();
                 if p.at_op("}") || p.at_eof() {
                     break;
                 }
-                if p.at_op("...") || p.at_op("..") {
+                if p.at_op("...") || p.at_op("..") || p.at_op("**") {
                     p.bump();
-                    if p.peek().ident().is_some() {
+                    if let Some(w) = p.peek().ident() {
+                        rest = Some(Sym::new(w));
                         p.bump();
                     }
                 } else {
@@ -129,7 +136,10 @@ impl Parser<'_> {
                         Tok::Str(s) => s.as_plain().unwrap_or_default(),
                         _ => {
                             let found = describe(&t);
-                            return p.err(t.span, format!("expected a key in the pattern, found {found}"));
+                            return p.err(
+                                t.span,
+                                format!("expected a key in the pattern, found {found}"),
+                            );
                         }
                     };
                     let key = Expr::new(ExprKind::Str(key_name.as_str().into()), t.span);
@@ -138,7 +148,7 @@ impl Parser<'_> {
                     } else {
                         Pattern::Bind(Sym::new(&key_name))
                     };
-                    entries.push((key, pat));
+                    entries.push((key, p.pattern_default(pat)?));
                 }
                 p.skip_newlines();
                 if !p.eat_op(",") {
@@ -147,8 +157,18 @@ impl Parser<'_> {
             }
             p.skip_newlines();
             p.expect_op("}", "to close the map pattern")?;
-            Ok(Pattern::Map(entries))
+            Ok(Pattern::Map(entries, rest))
         })
+    }
+
+    /// `pat = default` inside a destructuring pattern.
+    fn pattern_default(&mut self, pat: Pattern) -> PResult<Pattern> {
+        if self.at_op("=") {
+            self.bump();
+            let d = self.expr_no_assign()?;
+            return Ok(Pattern::Default(Box::new(pat), d));
+        }
+        Ok(pat)
     }
 
     /// A full `match` pattern, including alternatives and `as` bindings.
@@ -205,8 +225,14 @@ impl Parser<'_> {
 
     fn at_literal(&self) -> bool {
         let t = self.peek();
-        matches!(t.tok, Tok::Int(_) | Tok::Float(_) | Tok::BigInt(_) | Tok::Str(_))
-            || (t.is_op("-") && matches!(self.nth(1).tok, Tok::Int(_) | Tok::Float(_) | Tok::BigInt(_)))
+        matches!(
+            t.tok,
+            Tok::Int(_) | Tok::Float(_) | Tok::BigInt(_) | Tok::Str(_)
+        ) || (t.is_op("-")
+            && matches!(
+                self.nth(1).tok,
+                Tok::Int(_) | Tok::Float(_) | Tok::BigInt(_)
+            ))
     }
 
     fn primary_pattern(&mut self) -> PResult<Pattern> {
@@ -275,7 +301,10 @@ impl Parser<'_> {
         // `n: Int` typed binding.
         if !looks_capitalized(&word)
             && self.nth_is_op(1, ":")
-            && self.nth(2).ident().is_some_and(|w| looks_capitalized(w) || is_type_word(w))
+            && self
+                .nth(2)
+                .ident()
+                .is_some_and(|w| looks_capitalized(w) || is_type_word(w))
             && !self.nth_is_op(3, "(")
         {
             let (name, _) = self.expect_ident("")?;
@@ -290,7 +319,9 @@ impl Parser<'_> {
     fn ctor_pattern(&mut self) -> PResult<Pattern> {
         let (first, _) = self.expect_ident("in the pattern")?;
         let mut path = vec![first];
-        while (self.at_op("::") || self.at_op(".")) && self.nth(1).ident().is_some() && !self.nth(1).space_before
+        while (self.at_op("::") || self.at_op("."))
+            && self.nth(1).ident().is_some()
+            && !self.nth(1).space_before
         {
             self.bump();
             path.push(self.expect_ident("")?.0);
@@ -303,7 +334,10 @@ impl Parser<'_> {
                 let mut args = Vec::new();
                 let mut fields = Vec::new();
                 while !p.at_op(")") && !p.at_eof() {
-                    if p.peek().ident().is_some() && (p.nth_is_op(1, "=") || p.nth_is_op(1, ":")) && !p.nth_is_op(1, "::") {
+                    if p.peek().ident().is_some()
+                        && (p.nth_is_op(1, "=") || p.nth_is_op(1, ":"))
+                        && !p.nth_is_op(1, "::")
+                    {
                         let (n, _) = p.expect_ident("")?;
                         p.bump();
                         fields.push((n, p.match_pattern()?));
@@ -339,7 +373,11 @@ impl Parser<'_> {
                         p.bump();
                     } else {
                         let (n, _) = p.expect_ident("for the field")?;
-                        let pat = if p.eat_op(":") { p.match_pattern()? } else { Pattern::Bind(n) };
+                        let pat = if p.eat_op(":") {
+                            p.match_pattern()?
+                        } else {
+                            Pattern::Bind(n)
+                        };
                         fields.push((n, pat));
                     }
                     p.skip_newlines();
@@ -478,7 +516,7 @@ impl Parser<'_> {
     /// A type annotation in any dialect's spelling.
     pub(crate) fn type_expr(&mut self) -> PResult<TypeExpr> {
         let first = self.type_postfix()?;
-        if !self.at_op("|") || self.nth_is_op(1, "|") {
+        if !self.at_op("|") || self.nth_is_op(1, "|") || self.no_bitor {
             return Ok(first);
         }
         let mut alts = vec![first];
@@ -491,7 +529,10 @@ impl Parser<'_> {
     fn type_postfix(&mut self) -> PResult<TypeExpr> {
         let mut t = self.type_atom()?;
         loop {
-            if self.at_op("[") && (self.nth_is_op(1, "]") || matches!(self.nth(1).tok, Tok::Int(_)) && self.nth_is_op(2, "]")) {
+            if self.at_op("[")
+                && (self.nth_is_op(1, "]")
+                    || matches!(self.nth(1).tok, Tok::Int(_)) && self.nth_is_op(2, "]"))
+            {
                 self.bump();
                 if !self.at_op("]") {
                     self.bump();
@@ -511,7 +552,11 @@ impl Parser<'_> {
 
     /// One type without suffixes.
     pub(crate) fn type_atom(&mut self) -> PResult<TypeExpr> {
-        while self.at_op("&") || self.at_op("*") || self.at_any_word(&["mut", "const", "impl", "dyn", "struct", "unsigned", "signed"])
+        while self.at_op("&")
+            || self.at_op("*")
+            || self.at_any_word(&[
+                "mut", "const", "impl", "dyn", "struct", "unsigned", "signed",
+            ])
         {
             self.bump();
         }
@@ -537,6 +582,24 @@ impl Parser<'_> {
             }
             return Ok(TypeExpr::Tuple(items));
         }
+        if self.at_op("[")
+            && (self.nth_is_op(1, "]")
+                || matches!(self.nth(1).tok, Tok::Int(_)) && self.nth_is_op(2, "]"))
+        {
+            // Go slices and arrays: `[]int`, `[5]string`.
+            self.bump();
+            if !self.at_op("]") {
+                self.bump();
+            }
+            self.bump();
+            let elem = self.type_postfix()?;
+            return Ok(TypeExpr::List(Box::new(elem)));
+        }
+        if self.at_word("chan") && self.nth(1).ident().is_some() {
+            self.bump();
+            self.type_postfix()?;
+            return Ok(TypeExpr::Any);
+        }
         if self.at_op("[") {
             self.bump();
             let inner = self.nested(|p| {
@@ -551,7 +614,8 @@ impl Parser<'_> {
             })?;
             return Ok(inner);
         }
-        if self.at_any_word(&["fn", "func", "Fn", "FnMut", "FnOnce", "function"]) && (self.nth_is_op(1, "(") || self.nth_is_op(1, "<"))
+        if self.at_any_word(&["fn", "func", "Fn", "FnMut", "FnOnce", "function"])
+            && (self.nth_is_op(1, "(") || self.nth_is_op(1, "<"))
         {
             self.bump();
             self.skip_generics();
@@ -564,9 +628,22 @@ impl Parser<'_> {
             return Ok(TypeExpr::Any);
         }
         let (mut name, _) = self.expect_ident("for the type")?;
-        while (self.at_op(".") || self.at_op("::")) && self.nth(1).ident().is_some() && !self.nth(1).space_before {
+        while (self.at_op(".") || self.at_op("::"))
+            && self.nth(1).ident().is_some()
+            && !self.nth(1).space_before
+        {
             self.bump();
             name = self.expect_ident("")?.0;
+        }
+        if name.is("map") && self.at_op("[") {
+            // Go: `map[string]int`.
+            self.bump();
+            self.nested(|p| {
+                p.type_expr()?;
+                p.expect_op("]", "in the map type")
+            })?;
+            self.type_postfix()?;
+            return Ok(TypeExpr::Named(Sym::new("Map"), Vec::new()));
         }
         let mut args = Vec::new();
         if self.at_op("<") && !self.peek().space_before {
@@ -607,7 +684,9 @@ impl Parser<'_> {
                 TypeExpr::Optional(Box::new(args.pop().unwrap_or(TypeExpr::Any)))
             }
             "Union" if !args.is_empty() => TypeExpr::Union(args),
-            "Any" | "any" | "object" | "Object" | "auto" | "var" | "dynamic" | "interface" => TypeExpr::Any,
+            "Any" | "any" | "object" | "Object" | "auto" | "var" | "dynamic" | "interface" => {
+                TypeExpr::Any
+            }
             _ => TypeExpr::Named(name, args),
         };
         Ok(ty)

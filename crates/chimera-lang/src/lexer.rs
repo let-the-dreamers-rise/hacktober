@@ -124,8 +124,8 @@ impl Token {
 const OPERATORS: &[&str] = &[
     "...", "..=", "===", "!==", "<=>", "**=", "<<=", ">>=", "&&=", "||=", "??=", "..", "::", ":=",
     "=>", "==", "!=", "->", "<-", "<=", ">=", "<<", ">>", "+=", "-=", "*=", "/=", "%=", "^=", "&=",
-    "|=", "++", "--", "**", "&&", "||", "|>", "?.", "??", "?:", ".", ":", "=", "<", ">", "+", "-", "*",
-    "/", "%", "^", "&", "|", "!", "?", "~", "@", ",", ";", "(", ")", "[", "]", "{", "}", "\\",
+    "|=", "++", "--", "**", "&&", "||", "|>", "?.", "??", "?:", ".", ":", "=", "<", ">", "+", "-",
+    "*", "/", "%", "^", "&", "|", "!", "?", "~", "@", ",", ";", "(", ")", "[", "]", "{", "}", "\\",
 ];
 
 /// Lexes a whole source file.
@@ -201,6 +201,32 @@ impl<'a> Lexer<'a> {
             .sum()
     }
 
+    /// Whether a `'` starts a Rust lifetime or loop label rather than a
+    /// string: `'ident` not closed by another `'`, right after `&`, `<`,
+    /// `+`, `break`/`continue`, or at the start of a line before `:`.
+    fn at_lifetime(&self) -> bool {
+        let rest = &self.src[self.pos + 1..self.end];
+        let mut chars = rest.chars();
+        if !chars.next().is_some_and(is_ident_start) {
+            return false;
+        }
+        let ident_len: usize = rest
+            .chars()
+            .take_while(|&c| is_ident_continue(c))
+            .map(char::len_utf8)
+            .sum();
+        let after = rest[ident_len..].chars().next();
+        if after == Some('\'') {
+            return false;
+        }
+        match self.tokens.last().map(|t| &t.tok) {
+            Some(Tok::Op("&" | "<" | "+" | "&&")) => true,
+            Some(Tok::Op(",")) => matches!(after, Some('>' | ',')),
+            Some(Tok::Ident(w)) if w == "break" || w == "continue" => true,
+            _ => self.at_line_start && after == Some(':'),
+        }
+    }
+
     fn push(&mut self, tok: Tok, start: usize) {
         let col = self.column_of(start);
         let line_start = self.at_line_start;
@@ -221,8 +247,11 @@ impl<'a> Lexer<'a> {
     }
 
     fn error(&mut self, span: Span, msg: impl Into<String>) {
-        self.errors
-            .push(Diagnostic::error(msg).with_code("E0001").with_label(span, ""));
+        self.errors.push(
+            Diagnostic::error(msg)
+                .with_code("E0001")
+                .with_label(span, ""),
+        );
     }
 
     fn newline(&mut self) {
@@ -279,6 +308,19 @@ impl<'a> Lexer<'a> {
                 '/' if self.rest().starts_with("/*") => self.skip_block_comment(),
                 '-' if self.is_dash_comment() => self.skip_line_comment(),
                 '0'..='9' => self.number(),
+                '\'' if self.at_lifetime() => {
+                    // Rust lifetimes and loop labels (`&'a str`, `<'a>`,
+                    // `'outer: loop`) carry no runtime meaning.
+                    self.pos += 1;
+                    let _ = self.ident_text();
+                    if self.peek() == Some(':')
+                        && self.peek_at(1) != Some(':')
+                        && self.at_line_start
+                    {
+                        self.pos += 1;
+                    }
+                    self.space_before = true;
+                }
                 '"' | '\'' | '`' => self.string(start, ""),
                 '$' => self.dollar(start),
                 '@' if self.peek_at(1).is_some_and(is_ident_start) => {
@@ -292,7 +334,13 @@ impl<'a> Lexer<'a> {
         }
         let eof = self.end;
         self.pos = eof;
-        if !matches!(self.tokens.last(), None | Some(Token { tok: Tok::Newline, .. })) {
+        if !matches!(
+            self.tokens.last(),
+            None | Some(Token {
+                tok: Tok::Newline,
+                ..
+            })
+        ) {
             let col = self.column_of(eof);
             self.tokens.push(Token {
                 tok: Tok::Newline,
@@ -381,7 +429,9 @@ impl<'a> Lexer<'a> {
         }
         // Haskell/OCaml primes: `abs'`, `foldl'`, `x''`.
         while self.peek() == Some('\'')
-            && !self.peek_at(1).is_some_and(|c| is_ident_continue(c) || c == '\'')
+            && !self
+                .peek_at(1)
+                .is_some_and(|c| is_ident_continue(c) || c == '\'')
         {
             self.pos += 1;
             name.push('\'');
@@ -431,7 +481,10 @@ impl<'a> Lexer<'a> {
 
     fn number(&mut self) {
         let start = self.pos;
-        let after_dot = self.tokens.last().is_some_and(|t| t.is_op(".") && !self.space_before);
+        let after_dot = self
+            .tokens
+            .last()
+            .is_some_and(|t| t.is_op(".") && !self.space_before);
         let rest = self.rest();
         let radix = if rest.starts_with("0x") || rest.starts_with("0X") {
             16
@@ -520,7 +573,8 @@ impl<'a> Lexer<'a> {
 
     fn eat_digits(&mut self) {
         while let Some(c) = self.peek() {
-            if c.is_ascii_digit() || (c == '_' && self.peek_at(1).is_some_and(|d| d.is_ascii_digit()))
+            if c.is_ascii_digit()
+                || (c == '_' && self.peek_at(1).is_some_and(|d| d.is_ascii_digit()))
             {
                 self.pos += 1;
             } else {
@@ -581,7 +635,9 @@ impl<'a> Lexer<'a> {
         }
         let rest = self.rest();
         // OCaml float operators `+.`, `-.`, `*.`, `/.` behave like the plain ones.
-        if let Some(op) = ["+.", "-.", "*.", "/."].iter().find(|op| rest.starts_with(**op))
+        if let Some(op) = ["+.", "-.", "*.", "/."]
+            .iter()
+            .find(|op| rest.starts_with(**op))
             && !rest[2..].starts_with(|c: char| c.is_ascii_digit() || c == '.')
         {
             self.pos += 2;
@@ -736,7 +792,10 @@ impl<'a> Lexer<'a> {
                 } else {
                     (self.rest().chars().take(4).collect::<String>(), 4)
                 };
-                match u32::from_str_radix(&digits, 16).ok().and_then(char::from_u32) {
+                match u32::from_str_radix(&digits, 16)
+                    .ok()
+                    .and_then(char::from_u32)
+                {
                     Some(ch) => {
                         self.pos += consumed.min(self.end - self.pos);
                         text.push(ch);
@@ -791,14 +850,15 @@ impl<'a> Lexer<'a> {
             Some(colon) => (colon, Some(code[colon + 1..].to_owned())),
             None => (code.len(), None),
         };
-        // A Python `!r` / `!s` conversion is accepted and ignored.
-        let trimmed_len = {
-            let c = &code[..len];
-            if c.ends_with("!r") || c.ends_with("!s") || c.ends_with("!a") {
-                len - 2
-            } else {
-                len
-            }
+        // Python conversions: `!r` and `!a` use repr (marked with a leading
+        // `!r` in the spec), `!s` is the default.
+        let c = &code[..len];
+        let (trimmed_len, spec) = if c.ends_with("!r") || c.ends_with("!a") {
+            (len - 2, Some(format!("!r{}", spec.unwrap_or_default())))
+        } else if c.ends_with("!s") {
+            (len - 2, spec)
+        } else {
+            (len, spec)
         };
         parts.push(StrPart::Code {
             offset: code_start,
@@ -924,7 +984,13 @@ mod tests {
         );
         assert_eq!(
             kinds("t.0.1")[..5],
-            [ident("t"), Tok::Op("."), Tok::Int(0), Tok::Op("."), Tok::Int(1)]
+            [
+                ident("t"),
+                Tok::Op("."),
+                Tok::Int(0),
+                Tok::Op("."),
+                Tok::Int(1)
+            ]
         );
     }
 
@@ -990,10 +1056,7 @@ mod tests {
                 _ => panic!("not a string"),
             }
         };
-        assert_eq!(
-            code(&toks[0]),
-            vec![("x".into(), None), ("y".into(), None)]
-        );
+        assert_eq!(code(&toks[0]), vec![("x".into(), None), ("y".into(), None)]);
         assert_eq!(code(&toks[1]), vec![("z".into(), Some(".2f".into()))]);
         assert_eq!(code(&toks[2]), vec![("w".into(), None)]);
         assert_eq!(code(&toks[3]), vec![("v".into(), None)]);

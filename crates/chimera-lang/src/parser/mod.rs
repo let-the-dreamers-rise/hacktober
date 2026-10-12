@@ -149,6 +149,8 @@ pub(crate) struct Parser<'s> {
     pub(crate) no_juxtapose: bool,
     /// `|` is not bitwise-or here (Haskell guards).
     pub(crate) no_bitor: bool,
+    /// Offsets of parsed `yield`s not yet claimed by a function.
+    pub(crate) yields: std::cell::RefCell<Vec<usize>>,
     depth: usize,
 }
 
@@ -167,6 +169,7 @@ impl<'s> Parser<'s> {
             in_class: false,
             no_juxtapose: false,
             no_bitor: false,
+            yields: std::cell::RefCell::new(Vec::new()),
             depth: 0,
         }
     }
@@ -351,8 +354,11 @@ impl<'s> Parser<'s> {
     // ----- diagnostics and backtracking ----------------------------------
 
     pub(crate) fn error(&mut self, span: Span, msg: impl Into<String>) {
-        self.errors
-            .push(Diagnostic::error(msg).with_code("E0002").with_label(span, ""));
+        self.errors.push(
+            Diagnostic::error(msg)
+                .with_code("E0002")
+                .with_label(span, ""),
+        );
     }
 
     pub(crate) fn err<T>(&mut self, span: Span, msg: impl Into<String>) -> PResult<T> {
@@ -579,7 +585,10 @@ impl<'s> Parser<'s> {
                 }
                 if p.at_op(")") || p.at_op("]") {
                     let t = p.bump();
-                    p.error(t.span, format!("unexpected {} inside a block", describe(&t)));
+                    p.error(
+                        t.span,
+                        format!("unexpected {} inside a block", describe(&t)),
+                    );
                     continue;
                 }
                 match item(p) {
@@ -748,7 +757,10 @@ impl<'s> Parser<'s> {
         }
         let span = self.peek().span;
         let found = describe(self.peek());
-        self.err(span, format!("expected the end of the statement, found {found}"))
+        self.err(
+            span,
+            format!("expected the end of the statement, found {found}"),
+        )
     }
 
     pub(crate) fn make_stmt(&self, kind: StmtKind, start: Span) -> Stmt {
@@ -830,7 +842,13 @@ impl<'s> Parser<'s> {
     }
 
     /// Parses a full expression and wraps it as an `If` taking `then`.
-    pub(crate) fn mk_if(&self, cond: Expr, then: Block, otherwise: Option<Block>, span: Span) -> Expr {
+    pub(crate) fn mk_if(
+        &self,
+        cond: Expr,
+        then: Block,
+        otherwise: Option<Block>,
+        span: Span,
+    ) -> Expr {
         Expr::new(
             ExprKind::If {
                 cond: Box::new(cond),
@@ -855,8 +873,34 @@ impl<'s> Parser<'s> {
         )
     }
 
-    pub(crate) fn new_fn(&self, name: Option<Sym>, params: Vec<Param>, body: Block, span: Span) -> FnDef {
+    /// Takes the unclaimed `yield` offsets inside `span`.
+    pub(crate) fn claim_yields(&self, span: Span) -> Vec<usize> {
+        let mut all = self.yields.borrow_mut();
+        let (mut mine, rest): (Vec<usize>, Vec<usize>) =
+            all.iter().partition(|&&o| o >= span.start && o < span.end);
+        *all = rest;
+        mine.sort_unstable();
+        mine.dedup();
+        mine
+    }
+
+    /// A function definition. Named functions claim the yields in their
+    /// body; anonymous blocks don't (a `yield` inside a Ruby block belongs
+    /// to the enclosing method).
+    pub(crate) fn new_fn(
+        &self,
+        name: Option<Sym>,
+        params: Vec<Param>,
+        body: Block,
+        span: Span,
+    ) -> FnDef {
+        let yields = if name.is_some() {
+            self.claim_yields(span)
+        } else {
+            Vec::new()
+        };
         FnDef {
+            yields,
             name,
             params,
             body,
@@ -1026,5 +1070,6 @@ fn combine_clauses(first: &FnDef, next: &FnDef) -> FnDef {
         implicit_params: false,
         decorators: Vec::new(),
         bare: false,
+        yields: first.yields.iter().chain(&next.yields).copied().collect(),
     }
 }

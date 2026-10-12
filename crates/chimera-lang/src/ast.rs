@@ -224,7 +224,8 @@ impl Expr {
         match &self.kind {
             ExprKind::Name(_) | ExprKind::Member { .. } | ExprKind::Index { .. } => true,
             ExprKind::Tuple(items) | ExprKind::List(items) => items.iter().all(|e| {
-                e.is_assignable() || matches!(&e.kind, ExprKind::Spread(inner) if inner.is_assignable())
+                e.is_assignable()
+                    || matches!(&e.kind, ExprKind::Spread(inner) if inner.is_assignable())
             }),
             _ => false,
         }
@@ -386,6 +387,24 @@ pub enum ExprKind {
     },
     /// A natural-language request: `please sort xs descending`.
     Please(Rc<str>),
+    /// `let pattern = value` as a condition (`if let Some(x) = f()`,
+    /// `while let`, Swift `if let x = optional`): binds on success.
+    Let {
+        /// The pattern tried.
+        pattern: Box<Pattern>,
+        /// The value matched.
+        value: Box<Expr>,
+    },
+    /// `yield`, `yield a, b`, `yield from xs` / `yield* xs`.
+    Yield {
+        /// Yielded values (several for Ruby's `yield a, b`).
+        values: Vec<Expr>,
+        /// `yield from` / `yield*`: delegate to another iterable.
+        delegate: bool,
+    },
+    /// A jump used as an expression: `x ?? throw Error()`,
+    /// `None => return 0`, `Err(e) => raise e`.
+    Jump(Box<Stmt>),
 }
 
 /// Prefix operators.
@@ -523,6 +542,22 @@ pub struct FnDef {
     /// Declared without a parameter list (Ruby `def speak`): referencing it
     /// calls it, so `dog.speak` works without parentheses.
     pub bare: bool,
+    /// Source offsets of the `yield`s that belong to this function. A
+    /// function with yields is a generator (or, called with a trailing
+    /// block, a Ruby method that yields to it).
+    pub yields: Vec<usize>,
+}
+
+impl FnDef {
+    /// Whether the function contains `yield`.
+    pub fn is_generator(&self) -> bool {
+        !self.yields.is_empty()
+    }
+
+    /// Whether a statement of this function contains one of its yields.
+    pub fn yields_in(&self, span: Span) -> bool {
+        self.yields.iter().any(|&o| o >= span.start && o < span.end)
+    }
 }
 
 /// A function parameter.
@@ -646,8 +681,11 @@ pub enum Pattern {
         /// Position of the rest marker and its optional binding.
         rest: Option<(usize, Option<Sym>)>,
     },
-    /// `{name: n, age}`.
-    Map(Vec<(Expr, Pattern)>),
+    /// `{name: n, age, ...rest}`.
+    Map(Vec<(Expr, Pattern)>, Option<Sym>),
+    /// `x = default` inside a destructuring pattern: used when the value
+    /// is missing or nil.
+    Default(Box<Pattern>, Expr),
     /// `Some(x)`, `Point(x, y)`, `Shape::Circle(r)`, `Rect { w, h }`, `Circle r`.
     Ctor {
         /// Constructor path (last segment is the variant/class name).

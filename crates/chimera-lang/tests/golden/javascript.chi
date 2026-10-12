@@ -1,0 +1,96 @@
+// JavaScript-flavoured Chimera
+const nums = [5, 3, 8, 1, 9, 2];
+let total = 0;
+for (let i = 0; i < nums.length; i++) {
+  total += nums[i];
+}
+console.log(`total = ${total}, mean = ${total / nums.length}`);
+
+const doubled = nums.map(n => n * 2).filter(n => n > 5);
+console.log(doubled, nums.reduce((a, b) => a + b, 0));
+console.log([...nums].sort((a, b) => a - b), Math.max(...nums));
+
+function makeCounter() {
+  let count = 0;
+  return {
+    inc: () => ++count,
+    get: () => count,
+  };
+}
+const c = makeCounter();
+c.inc(); c.inc(); c.inc();
+console.log("counter:", c.get());
+
+class Shape {
+  constructor(name) { this.name = name; }
+  area() { return 0; }
+  toString() { return `${this.name} with area ${this.area().toFixed(2)}`; }
+}
+class Circle extends Shape {
+  constructor(r) { super("circle"); this.r = r; }
+  area() { return Math.PI * this.r ** 2; }
+}
+class Rect extends Shape {
+  constructor(w, h) { super("rect"); this.w = w; this.h = h; }
+  area() { return this.w * this.h; }
+  static square(s) { return new Rect(s, s); }
+}
+const shapes = [new Circle(1), new Rect(2, 3), Rect.square(4)];
+shapes.forEach(s => console.log(String(s)));
+console.log(shapes.map(s => s.name).join(" | "));
+
+const person = { name: "Ada", age: 36, langs: ["en", "fr"] };
+const { name, age, ...others } = person;
+console.log(name, age, others);
+const [first, , third = "default"] = ["a", "b"];
+console.log(first, third);
+console.log(Object.keys(person), Object.entries({ x: 1, y: 2 }));
+console.log({ ...person, age: 37 }.age, person?.address?.city ?? "unknown");
+
+const json = JSON.stringify({ id: 1, tags: ["a", "b"], ok: true });
+console.log(json, JSON.parse(json).tags[1]);
+
+function divide(a, b) {
+  if (b === 0) throw new Error("cannot divide by zero");
+  return a / b;
+}
+try {
+  divide(1, 0);
+} catch (e) {
+  console.log("error:", e.message);
+} finally {
+  console.log("done");
+}
+
+switch (nums.length) {
+  case 1:
+    console.log("one");
+    break;
+  case 6:
+    console.log("six");
+    break;
+  default:
+    console.log("many");
+}
+
+let s = "";
+for (const n of [1, 2, 3]) s += n;
+for (const k in { a: 1, b: 2 }) s += k;
+console.log(s, typeof s, typeof 42, typeof undefined);
+
+const fib = n => n < 2 ? n : fib(n - 1) + fib(n - 2);
+console.log(Array.from({ length: 10 }, (_, i) => fib(i)));
+console.log("hello".toUpperCase(), "a-b-c".split("-"), "  pad ".trim(), "abc".includes("b"));
+console.log([1, [2, [3, [4]]]].flat(Infinity), [3, 1, 2].includes(2), [1, 2, 3].indexOf(3));
+let x = 10;
+x ||= 5; x &&= x + 1; let y = null; y ??= "filled";
+console.log(x, y, 7 % 3, 2 ** 10, Number("3.5") + 1, parseInt("42px"));
+function* range(start, end) {
+  for (let i = start; i < end; i++) yield i;
+}
+console.log([...range(3, 7)]);
+const sym = new Map([["a", 1]]);
+sym.set("b", 2);
+console.log(sym.get("b"), sym.has("a"), sym.size);
+const set = new Set([1, 2, 2, 3]);
+console.log(set.size, [...set]);

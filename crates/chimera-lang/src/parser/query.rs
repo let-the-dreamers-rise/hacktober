@@ -21,18 +21,49 @@ use crate::symbol::Sym;
 
 /// Words that end a SQL clause (and so cannot be table aliases).
 const CLAUSE_WORDS: &[&str] = &[
-    "from", "where", "group", "having", "order", "orderby", "limit", "offset", "join", "inner",
-    "left", "right", "outer", "cross", "on", "select", "union", "into", "values", "set", "and",
-    "or", "as", "asc", "desc", "ascending", "descending", "full", "natural", "by",
+    "from",
+    "where",
+    "group",
+    "having",
+    "order",
+    "orderby",
+    "limit",
+    "offset",
+    "join",
+    "inner",
+    "left",
+    "right",
+    "outer",
+    "cross",
+    "on",
+    "select",
+    "union",
+    "into",
+    "values",
+    "set",
+    "and",
+    "or",
+    "as",
+    "asc",
+    "desc",
+    "ascending",
+    "descending",
+    "full",
+    "natural",
+    "by",
 ];
 
 impl Parser<'_> {
     fn at_kw(&self, kw: &str) -> bool {
-        self.peek().ident().is_some_and(|w| w.eq_ignore_ascii_case(kw))
+        self.peek()
+            .ident()
+            .is_some_and(|w| w.eq_ignore_ascii_case(kw))
     }
 
     fn nth_kw(&self, n: usize, kw: &str) -> bool {
-        self.nth(n).ident().is_some_and(|w| w.eq_ignore_ascii_case(kw))
+        self.nth(n)
+            .ident()
+            .is_some_and(|w| w.eq_ignore_ascii_case(kw))
     }
 
     fn eat_kw(&mut self, kw: &str) -> bool {
@@ -50,19 +81,32 @@ impl Parser<'_> {
         } else {
             let span = self.peek().span;
             let found = super::describe(self.peek());
-            self.err(span, format!("expected `{}`, found {found}", kw.to_uppercase()))
+            self.err(
+                span,
+                format!("expected `{}`, found {found}", kw.to_uppercase()),
+            )
         }
     }
 
     /// Runs `f` with SQL expression rules (`=` compares, no `as` casts).
     fn sql<T>(&mut self, f: impl FnOnce(&mut Self) -> PResult<T>) -> PResult<T> {
-        let saved = (self.eq_is_cmp, self.no_as_cast, self.no_brace, self.no_juxtapose);
+        let saved = (
+            self.eq_is_cmp,
+            self.no_as_cast,
+            self.no_brace,
+            self.no_juxtapose,
+        );
         self.eq_is_cmp = true;
         self.no_as_cast = true;
         self.no_brace = false;
         self.no_juxtapose = true;
         let r = f(self);
-        (self.eq_is_cmp, self.no_as_cast, self.no_brace, self.no_juxtapose) = saved;
+        (
+            self.eq_is_cmp,
+            self.no_as_cast,
+            self.no_brace,
+            self.no_juxtapose,
+        ) = saved;
         r
     }
 
@@ -96,7 +140,10 @@ impl Parser<'_> {
             if self.at_op("*") {
                 self.bump();
                 q.columns.push(SelectItem::Star(None));
-            } else if self.peek().ident().is_some() && self.nth_is_op(1, ".") && self.nth_is_op(2, "*") {
+            } else if self.peek().ident().is_some()
+                && self.nth_is_op(1, ".")
+                && self.nth_is_op(2, "*")
+            {
                 let (alias, _) = self.expect_ident("")?;
                 self.bump();
                 self.bump();
@@ -116,7 +163,10 @@ impl Parser<'_> {
             self.sources(&mut q)?;
         }
         self.clauses(&mut q)?;
-        Ok(Expr::new(ExprKind::Query(Rc::new(Query::Select(q))), self.span_from(start)))
+        Ok(Expr::new(
+            ExprKind::Query(Rc::new(Query::Select(q))),
+            self.span_from(start),
+        ))
     }
 
     /// Lets a query continue on following lines when they start with a
@@ -124,10 +174,9 @@ impl Parser<'_> {
     fn skip_query_newlines(&mut self) {
         if self.at_newline() {
             let next = self.peek_past_newlines();
-            if next
-                .ident()
-                .is_some_and(|w| CLAUSE_WORDS.contains(&w.to_ascii_lowercase().as_str()) && w != "and" && w != "or")
-            {
+            if next.ident().is_some_and(|w| {
+                CLAUSE_WORDS.contains(&w.to_ascii_lowercase().as_str()) && w != "and" && w != "or"
+            }) {
                 self.skip_newlines();
             }
         }
@@ -332,10 +381,16 @@ impl Parser<'_> {
             } else {
                 let span = self.peek().span;
                 let found = super::describe(self.peek());
-                return self.err(span, format!("expected `select` to finish the query, found {found}"));
+                return self.err(
+                    span,
+                    format!("expected `select` to finish the query, found {found}"),
+                );
             }
         }
-        Ok(Expr::new(ExprKind::Query(Rc::new(Query::Select(q))), self.span_from(start)))
+        Ok(Expr::new(
+            ExprKind::Query(Rc::new(Query::Select(q))),
+            self.span_from(start),
+        ))
     }
 
     pub(crate) fn insert_query(&mut self) -> PResult<Expr> {
@@ -376,7 +431,11 @@ impl Parser<'_> {
             }
         }
         Ok(Expr::new(
-            ExprKind::Query(Rc::new(Query::Insert { target, columns, rows })),
+            ExprKind::Query(Rc::new(Query::Insert {
+                target,
+                columns,
+                rows,
+            })),
             self.span_from(start),
         ))
     }
@@ -384,7 +443,11 @@ impl Parser<'_> {
     pub(crate) fn update_query(&mut self) -> PResult<Expr> {
         let start = self.bump().span;
         let target = self.sql(|p| p.postfix_expr())?;
-        let alias = if !self.at_kw("set") { Some(self.alias_name()?) } else { None };
+        let alias = if !self.at_kw("set") {
+            Some(self.alias_name()?)
+        } else {
+            None
+        };
         self.expect_kw("set")?;
         let mut sets = Vec::new();
         loop {
@@ -399,7 +462,11 @@ impl Parser<'_> {
             }
         }
         self.skip_query_newlines();
-        let filter = if self.eat_kw("where") { Some(self.sql_expr()?) } else { None };
+        let filter = if self.eat_kw("where") {
+            Some(self.sql_expr()?)
+        } else {
+            None
+        };
         Ok(Expr::new(
             ExprKind::Query(Rc::new(Query::Update {
                 target,
@@ -415,15 +482,28 @@ impl Parser<'_> {
         let start = self.bump().span;
         self.expect_kw("from")?;
         let target = self.sql(|p| p.postfix_expr())?;
-        let alias = if self.peek().ident().is_some_and(|w| !w.eq_ignore_ascii_case("where")) && self.same_line() {
+        let alias = if self
+            .peek()
+            .ident()
+            .is_some_and(|w| !w.eq_ignore_ascii_case("where"))
+            && self.same_line()
+        {
             Some(self.alias_name()?)
         } else {
             None
         };
         self.skip_query_newlines();
-        let filter = if self.eat_kw("where") { Some(self.sql_expr()?) } else { None };
+        let filter = if self.eat_kw("where") {
+            Some(self.sql_expr()?)
+        } else {
+            None
+        };
         Ok(Expr::new(
-            ExprKind::Query(Rc::new(Query::Delete { target, alias, filter })),
+            ExprKind::Query(Rc::new(Query::Delete {
+                target,
+                alias,
+                filter,
+            })),
             self.span_from(start),
         ))
     }

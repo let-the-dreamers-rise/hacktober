@@ -128,7 +128,10 @@ fn mul_mag(a: &[u32], b: &[u32]) -> Vec<u32> {
         &sub_mag(&mul_mag(&add_mag(&a0, &a1), &add_mag(&b0, &b1)), &z0),
         &z2,
     );
-    let mut out = add_mag(&add_mag(&shift_limbs(&z2, 2 * m), &shift_limbs(&z1, m)), &z0);
+    let mut out = add_mag(
+        &add_mag(&shift_limbs(&z2, 2 * m), &shift_limbs(&z1, m)),
+        &z0,
+    );
     trim(&mut out);
     out
 }
@@ -535,7 +538,10 @@ mod tests {
         assert_eq!(big("9223372036854775808").to_i64(), None);
         assert_eq!(big("-9223372036854775808").to_i64(), Some(i64::MIN));
         assert_eq!(big("1000000").to_f64(), 1e6);
-        assert_eq!(BigInt::from_f64(1e20).unwrap().to_string(), "100000000000000000000");
+        assert_eq!(
+            BigInt::from_f64(1e20).unwrap().to_string(),
+            "100000000000000000000"
+        );
         assert_eq!(BigInt::from_f64(-3.9).unwrap().to_string(), "-3");
     }
 
@@ -605,7 +611,13 @@ mod tests {
 
     #[test]
     fn ordering() {
-        let mut xs = vec![big("5"), big("-100"), big("99999999999999999999"), big("0"), big("-3")];
+        let mut xs = vec![
+            big("5"),
+            big("-100"),
+            big("99999999999999999999"),
+            big("0"),
+            big("-3"),
+        ];
         xs.sort();
         let s: Vec<String> = xs.iter().map(ToString::to_string).collect();
         assert_eq!(s, ["-100", "-3", "0", "5", "99999999999999999999"]);

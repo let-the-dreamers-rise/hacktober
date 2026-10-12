@@ -1,0 +1,103 @@
+// The Chimera prelude: library code written in Chimera itself.
+// Everything defined here becomes a built-in available to every program.
+
+// Rust-style results. `Some(x)` is just `x` and `None` is `nil`, so optional
+// values need no wrapper; `Result` carries an error alongside.
+enum Result {
+    Ok(value),
+    Err(error),
+}
+
+impl Result {
+    fn is_ok(self) { match self { Ok(_) => true, Err(_) => false } }
+    fn is_err(self) { match self { Ok(_) => false, Err(_) => true } }
+    fn unwrap(self) {
+        match self {
+            Ok(v) => v,
+            Err(e) => raise ValueError("called unwrap() on an Err value: " + str(e)),
+        }
+    }
+    fn expect(self, message) {
+        match self {
+            Ok(v) => v,
+            Err(e) => raise ValueError(message + ": " + str(e)),
+        }
+    }
+    fn unwrap_or(self, fallback) { match self { Ok(v) => v, Err(_) => fallback } }
+    fn unwrap_err(self) { match self { Err(e) => e, Ok(v) => raise ValueError("called unwrap_err() on Ok: " + str(v)) } }
+    fn map(self, f) { match self { Ok(v) => Ok(f(v)), Err(e) => Err(e) } }
+    fn map_err(self, f) { match self { Ok(v) => Ok(v), Err(e) => Err(f(e)) } }
+    fn and_then(self, f) { match self { Ok(v) => f(v), Err(e) => Err(e) } }
+    fn ok(self) { match self { Ok(v) => v, Err(_) => nil } }
+    fn err(self) { match self { Ok(_) => nil, Err(e) => e } }
+}
+
+// `Some(x)` wraps nothing: an optional value is the value or nil.
+def Some(value) = value
+
+// Function helpers.
+def identity(x) = x
+def constantly(x) = fn(*args) => x
+def compose(*fs) {
+    fn(x) {
+        let result = x
+        for f in reversed(fs) { result = f(result) }
+        result
+    }
+}
+def pipe_all(*fs) {
+    fn(x) {
+        let result = x
+        for f in fs { result = f(result) }
+        result
+    }
+}
+def flip(f) = fn(a, b) => f(b, a)
+def curry(f, *bound) = fn(*more) => f(*bound, *more)
+def partial(f, *bound) = fn(*more) => f(*bound, *more)
+def memoize(f) {
+    let cache = {}
+    fn(*args) {
+        let key = tuple(args)
+        if key not in cache { cache[key] = f(*args) }
+        cache[key]
+    }
+}
+def times(n, f) {
+    for i in range(n) { f(i) }
+}
+def tap(x, f) {
+    f(x)
+    x
+}
+
+// Java's StringBuilder (C#'s too).
+class StringBuilder {
+    constructor(initial = "") {
+        this.text = str(initial)
+    }
+    append(x) {
+        this.text = this.text + str(x)
+        return this
+    }
+    AppendLine(x = "") { return this.append(str(x) + "\n") }
+    Append(x) { return this.append(x) }
+    insert(i, x) {
+        this.text = this.text.slice(0, i) + str(x) + this.text.slice(i)
+        return this
+    }
+    reverse() {
+        this.text = this.text.split("").reverse().join("")
+        return this
+    }
+    deleteCharAt(i) {
+        this.text = this.text.slice(0, i) + this.text.slice(i + 1)
+        return this
+    }
+    setLength(n) { this.text = this.text.slice(0, n) }
+    charAt(i) { return this.text[i] }
+    length() { return len(this.text) }
+    isEmpty() { return len(this.text) == 0 }
+    toString() { return this.text }
+    ToString() { return this.text }
+}
