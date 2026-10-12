@@ -20,7 +20,7 @@ jobs:
     name: Format, clippy and docs
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install || rustup show  # installs the toolchain from rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       - name: rustfmt
@@ -40,7 +40,7 @@ jobs:
       matrix:
         os: [ubuntu-latest, macos-latest]
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install || rustup show  # installs the toolchain from rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       # The transpiler round-trip test runs the generated code on these.
@@ -66,7 +66,7 @@ jobs:
     name: Minimum supported Rust (1.88)
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - uses: actions/checkout@v7
       - run: rustup toolchain install 1.88 --profile minimal
       - uses: Swatinem/rust-cache@v2
       - run: cargo +1.88 build --workspace --all-targets
