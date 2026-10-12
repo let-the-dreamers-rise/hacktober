@@ -106,6 +106,8 @@ pub fn display_plain(v: &Value, nested: bool) -> String {
             Value::Native(n) => format!("<method {}>", n.name),
             _ => "<method>".into(),
         },
+        // `"#{e.class}"` is the name; `repr(cls)` marks it as a class.
+        Value::Class(c) if !nested => c.name.to_string(),
         Value::Class(c) => format!("<class {}>", c.name),
         Value::Instance(i) => {
             if i.class.has_ancestor_named("Error") {

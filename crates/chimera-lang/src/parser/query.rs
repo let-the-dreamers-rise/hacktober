@@ -413,6 +413,15 @@ impl Parser<'_> {
         let mut rows = Vec::new();
         loop {
             self.skip_newlines();
+            if self.at_op("{") {
+                // A record: `VALUES {"name": "Alan", …}`.
+                let record = self.nested(|p| p.postfix_expr())?;
+                rows.push(vec![record]);
+                if !self.eat_op(",") {
+                    break;
+                }
+                continue;
+            }
             self.expect_op("(", "to start a row of values")?;
             let row = self.nested(|p| {
                 let mut row = Vec::new();

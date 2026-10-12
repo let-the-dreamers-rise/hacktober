@@ -6,7 +6,7 @@ use std::rc::Rc;
 use chimera_core::Span;
 
 use super::pattern::{is_type_word, looks_capitalized};
-use super::{Header, PResult, Parser, describe, terms};
+use super::{Header, PResult, Parser, describe, simple_param, terms};
 use crate::ast::*;
 use crate::lexer::Tok;
 use crate::symbol::Sym;
@@ -201,7 +201,9 @@ impl Parser<'_> {
                     self.bump();
                     return self.simple_stmt(StmtKind::Pass, start);
                 }
-                "del" | "delete" if !next.is_word("from") && !next.is_op("(") && next_ident => {
+                "del" | "delete" | "DELETE"
+                    if !next.ident().is_some_and(|w| w.eq_ignore_ascii_case("from")) && !next.is_op("(") && next_ident =>
+                {
                     return self.delete_stmt();
                 }
                 "global" | "nonlocal" if next_ident => {
@@ -232,6 +234,12 @@ impl Parser<'_> {
                 return Ok(self.make_stmt(StmtKind::Pass, start));
             }
             if let Some(s) = self.attempt(|p| p.c_decl(h)) {
+                return Ok(s);
+            }
+            if self.nth_is_op(1, "(")
+                && !self.nth(1).space_before
+                && let Some(s) = self.attempt(|p| p.math_def())
+            {
                 return Ok(s);
             }
             if let Some(s) = self.attempt(|p| p.haskell_def(h)) {
@@ -2220,6 +2228,37 @@ impl Parser<'_> {
         Ok(self.make_stmt(StmtKind::Repeat { count, body }, start))
     }
 
+    /// Mathematical definitions: `f(x) = x^2 + 1`, `loss(w, b) = (w - b)^2`.
+    fn math_def(&mut self) -> PResult<Stmt> {
+        let start = self.peek().span;
+        let (name, _) = self.expect_ident("")?;
+        if super::expr::is_reserved(&name.as_str()) {
+            return Err(());
+        }
+        self.expect_op("(", "")?;
+        let mut params = Vec::new();
+        while !self.at_op(")") {
+            let (p, _) = self.expect_ident("")?;
+            params.push(simple_param(p));
+            if !self.eat_op(",") {
+                break;
+            }
+        }
+        self.expect_op(")", "")?;
+        if !self.at_op("=") || self.nth_is_op(1, "=") {
+            return Err(());
+        }
+        self.bump();
+        let body = self.expr()?;
+        self.end_stmt()?;
+        let span = self.span_from(start);
+        let def = self.new_fn(Some(name), params, Block::of_expr(body), span);
+        Ok(Stmt {
+            kind: StmtKind::Fn(Rc::new(def)),
+            span,
+        })
+    }
+
     /// Swift: `guard cond else { … }` runs the block when `cond` fails;
     /// `guard let x = opt else { return }` binds `x` for the rest of the scope.
     fn guard_stmt(&mut self, h: Header) -> PResult<Stmt> {
@@ -2575,6 +2614,10 @@ impl Parser<'_> {
             self.expr()?; // Python exception chaining is accepted and ignored.
         }
         self.simple_stmt(StmtKind::Throw(value), start)
+    }
+
+    pub(crate) fn try_stmt_pub(&mut self, h: Header) -> PResult<Stmt> {
+        self.try_stmt(h)
     }
 
     fn try_stmt(&mut self, h: Header) -> PResult<Stmt> {

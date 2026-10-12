@@ -172,6 +172,13 @@ impl Parser<'_> {
                 self.eat_op("=");
                 self.eat_op(":");
                 options.push((opt("lr"), self.expr_bp(bp::RANGE + 1)?));
+            } else if self.at_word("with") && self.nth_is_word(1, "loss") {
+                // `with loss mse`
+                self.bump();
+                self.bump();
+                self.eat_op("=");
+                let l = self.postfix_expr()?;
+                options.push((opt("loss"), name_to_str(l)));
             } else if self.eat_word("using") || self.eat_word("with") || self.eat_word("optimizer")
             {
                 let o = self.postfix_expr()?;

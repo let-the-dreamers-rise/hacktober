@@ -1,0 +1,42 @@
+# English as a programming language
+set x to 5
+let y be 10
+say "x plus y is", x plus y
+add 3 to x
+say "x is now", x
+if x is greater than 7 then say "x is big" otherwise say "x is small"
+repeat 3 times
+    say "hip hip hooray"
+end
+say "the square root of 144 is", the square root of 144
+say "the length of chimera is", the length of "chimera"
+numbers = [5, 3, 9, 1, 7]
+say "the sum of numbers is", the sum of numbers
+increase x by 10
+say x
+
+# `please` runs instructions written in English
+scores = [42, 17, 88, 63]
+please sort scores descending
+please print scores
+please add 99 to scores and then print scores
+please keep the even numbers in scores
+please print scores
+please double every number in scores
+say scores
+total = please the sum of scores
+say "total:", total
+please describe scores
+please plot {"cats": 3, "dogs": 5, "fish": 1}
+please count to 5
+name = "ada lovelace"
+please capitalize name
+say name
+please swap x and y
+say x, y
+please say hello 2 times
+try
+    please do something impossible
+catch e
+    say "please failed politely:", e.message.split(".")[0]
+end

@@ -907,10 +907,13 @@ impl<'s> Parser<'s> {
                 ));
             }
             Tok::Op("∇") => {
+                // `∇f(x, y)` is `(∇f)(x, y)`: the operator binds to the
+                // function, then the call applies.
                 self.bump();
-                let f = self.expr_bp(bp::UNARY)?;
+                let f = self.primary()?;
                 let span = start.to(f.span);
-                return Ok(Expr::new(ExprKind::Gradient(Box::new(f)), span));
+                let g = Expr::new(ExprKind::Gradient(Box::new(f)), span);
+                return self.postfix_ops(g);
             }
             Tok::Ident(w)
                 if w.eq_ignore_ascii_case("not") && !self.nth_is_op(1, "(") || w == "not" =>
@@ -1206,6 +1209,19 @@ impl<'s> Parser<'s> {
                 });
             }
             "please" => return self.please_expr(),
+            "try" if self.nth_is_op(1, "{") || self.nth_is_op(1, ":") => {
+                // Kotlin/Scala: `val x = try { parse(s) } catch (e: Exception) { -1 }`.
+                let h = self.header();
+                let stmt = self.try_stmt_pub(h)?;
+                let span = stmt.span;
+                return Ok(Expr::new(ExprKind::Block(Block::new(vec![stmt])), span));
+            }
+            "train" if self.nth(1).ident().is_some() && self.nth_is_word(2, "on") => {
+                // `history = train net on X, y for 100 epochs`
+                let stmt = self.no_jux(|p| p.train_stmt())?;
+                let span = stmt.span;
+                return Ok(Expr::new(ExprKind::Block(Block::new(vec![stmt])), span));
+            }
             "vec!" if self.nth_is_op(1, "[") => {
                 // Rust: `vec![1, 2, 3]`, `vec![0; n]`.
                 self.bump();
@@ -1429,7 +1445,15 @@ impl<'s> Parser<'s> {
         let start = self.bump().span;
         let from = self.peek().span.start;
         let mut to = from;
-        while !self.at_newline() && !self.at_eof() && !self.at_op(";") && !self.at_op("}") {
+        let mut depth = 0i32;
+        while !self.at_eof()
+            && (depth > 0 || !self.at_newline() && !self.at_op(";") && !self.at_op("}"))
+        {
+            if self.at_op("(") || self.at_op("[") || self.at_op("{") {
+                depth += 1;
+            } else if self.at_op(")") || self.at_op("]") || self.at_op("}") {
+                depth -= 1;
+            }
             to = self.bump().span.end;
         }
         let text = self.src[from..to].trim().to_owned();
@@ -2849,6 +2873,28 @@ impl<'s> Parser<'s> {
     /// An expression statement that may be a parenthesis-free call:
     /// `puts "hi"`, `print x, y`, `obj.method arg`.
     pub(crate) fn command_or_expr(&mut self) -> PResult<Expr> {
+        // SQL statements are expressions, not command calls.
+        let sql = match self.peek().ident().map(str::to_ascii_lowercase).as_deref() {
+            Some("update") => {
+                self.nth(1).ident().is_some()
+                    && self
+                        .nth(2)
+                        .ident()
+                        .is_some_and(|w| w.eq_ignore_ascii_case("set"))
+            }
+            Some("delete") => self
+                .nth(1)
+                .ident()
+                .is_some_and(|w| w.eq_ignore_ascii_case("from")),
+            Some("insert") => self
+                .nth(1)
+                .ident()
+                .is_some_and(|w| w.eq_ignore_ascii_case("into")),
+            _ => false,
+        };
+        if sql {
+            return self.expr();
+        }
         if let Some(w) = self.peek().ident().map(str::to_owned)
             && !is_reserved(&w)
             && self.command_arg_ahead(&w, 1)

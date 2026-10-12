@@ -357,6 +357,63 @@ pub fn summarize(text: &str, n: usize) -> String {
         .join(" ")
 }
 
+/// Seed vocabulary for common topic labels, so zero-shot classification
+/// works offline: a label like "sports" brings its own examples.
+const TOPICS: &[(&[&str], &str)] = &[
+    (
+        &["sports", "sport", "athletics"],
+        "game match team goal score player striker coach league season win tournament ball",
+    ),
+    (
+        &["cooking", "food", "recipe", "recipes", "cuisine"],
+        "recipe oven bake cook eggs whisk flour pan dish ingredients taste kitchen",
+    ),
+    (
+        &["politics", "political", "government"],
+        "election vote government minister policy parliament senate law president campaign party",
+    ),
+    (
+        &["technology", "tech", "programming", "software", "computers"],
+        "code software computer program bug compiler server app developer data algorithm",
+    ),
+    (
+        &["business", "finance", "economy", "money"],
+        "market stock price revenue profit company sales investors bank economy shares",
+    ),
+    (
+        &["science", "research"],
+        "experiment study research scientists theory data physics biology chemistry lab",
+    ),
+    (
+        &["health", "medicine", "medical"],
+        "doctor patient hospital disease treatment health medicine symptoms vaccine",
+    ),
+    (
+        &["music", "songs"],
+        "song album band music concert guitar singer melody lyrics",
+    ),
+    (
+        &["movies", "film", "films", "cinema", "entertainment"],
+        "movie film actor director cinema scene trailer premiere",
+    ),
+    (
+        &["travel", "tourism"],
+        "flight hotel trip travel beach vacation tourist passport",
+    ),
+    (
+        &["weather", "climate"],
+        "rain sunny storm temperature forecast weather wind snow cloudy",
+    ),
+];
+
+fn topic_examples(label: &str) -> Option<&'static str> {
+    let l = label.to_lowercase();
+    TOPICS
+        .iter()
+        .find(|(names, _)| names.contains(&l.as_str()))
+        .map(|(_, words)| *words)
+}
+
 /// Zero/few-shot classification by nearest centroid in embedding space.
 ///
 /// Each label comes with example texts (the label itself always counts as
@@ -376,6 +433,15 @@ pub fn classify(text: &str, labels: &[(String, Vec<String>)]) -> Vec<(String, f6
                 }
             }
             let mut sim = cosine(&x, &centroid);
+            // Built-in topics: count the text's words found in the topic's
+            // vocabulary.
+            if examples.is_empty()
+                && let Some(vocab) = topic_examples(label)
+            {
+                let vocab: Vec<&str> = vocab.split_whitespace().collect();
+                let hits = words.iter().filter(|w| vocab.contains(&w.as_str())).count();
+                sim += 0.4 * hits as f64;
+            }
             // Literal mentions of the label are strong evidence.
             for lw in tokenize(label) {
                 if words.contains(&lw) {

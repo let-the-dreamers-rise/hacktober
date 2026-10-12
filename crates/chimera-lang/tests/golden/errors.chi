@@ -1,0 +1,50 @@
+# Errors are values you can catch in any dialect's syntax.
+try:
+    [1, 2, 3][10]
+except IndexError as e:
+    print("python caught:", e)
+
+try {
+    null.foo();
+} catch (e) {
+    console.log("js caught:", e.message);
+}
+
+begin
+  Integer("forty-two")
+rescue ArgumentError, TypeError => e
+  puts "ruby caught: #{e.class}"
+end
+
+class InsufficientFunds(Exception):
+    def __init__(self, needed):
+        super().__init__(f"need {needed} more")
+        self.needed = needed
+
+def withdraw(balance, amount):
+    if amount > balance:
+        raise InsufficientFunds(amount - balance)
+    return balance - amount
+
+try:
+    withdraw(10, 25)
+except InsufficientFunds as err:
+    print("custom:", err, "| needed:", err.needed)
+finally:
+    print("cleanup")
+
+r = Err("bad")
+match r {
+    Ok(v) => println!("ok {}", v),
+    Err(e) => println!("rust-style error: {}", e),
+}
+print(divide := lambda a, b: a / b)
+try:
+    divide(1, 0)
+except ZeroDivisionError:
+    print("no division by zero")
+assert 1 + 1 == 2, "math is broken"
+result = try { int("x") } catch { -1 }
+print("fallback:", result)
+lenght = 3
+print(lenth)

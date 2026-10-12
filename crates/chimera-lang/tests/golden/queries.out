@@ -1,0 +1,17 @@
+Ken 61
+Margaret 52
+Barbara 47
+Grace 45
+┌──────┬───┬─────────┬─────┐
+│ dept │ n │ avg_pay │ top │
+├──────┼───┼─────────┼─────┤
+│ eng  │ 3 │ 135.0   │ 150 │
+│ ops  │ 2 │ 98.0    │ 101 │
+└──────┴───┴─────────┴─────┘
+["Margaret", "Barbara"]
+[{"total": 6, "payroll": 741}]
+Linus, Ada
+["Ada", "Grace", "Margaret"]
+6 [105]
+[{"name": "book"}]
+[{"name": "lamp", "double": 60}]

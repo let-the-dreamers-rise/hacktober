@@ -349,6 +349,11 @@ impl<'a> Lexer<'a> {
         if !operand_before {
             return false;
         }
+        // Aligned trailing comments sit after two or more spaces:
+        // `x = f(y)   // note`.
+        if self.src[..self.pos].ends_with("  ") || self.src[..self.pos].ends_with('\t') {
+            return false;
+        }
         let rest = &self.src[self.pos + 2..self.end];
         let line = rest.split('\n').next().unwrap_or("").trim();
         let Some(first) = line.chars().next() else {

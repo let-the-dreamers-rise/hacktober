@@ -183,6 +183,15 @@ impl Interp {
                     for e in row {
                         values.push(self.eval(e, env)?);
                     }
+                    // `VALUES {…}` inserts a whole record.
+                    if columns.is_empty()
+                        && values.len() == 1
+                        && matches!(values[0], Value::Map(_) | Value::Instance(_))
+                    {
+                        list.borrow_mut().push(values.pop().unwrap_or(Value::Nil));
+                        count += 1;
+                        continue;
+                    }
                     let keys: Vec<Value> = if !columns.is_empty() {
                         columns.iter().map(|c| Value::Str(c.as_str())).collect()
                     } else {

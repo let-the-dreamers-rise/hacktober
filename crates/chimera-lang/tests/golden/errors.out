@@ -1,0 +1,10 @@
+python caught: index 10 is out of range for length 3
+js caught: cannot call `foo` on nil (use `?.` to make the call optional)
+ruby caught: ValueError
+custom: need 15 more | needed: 15
+cleanup
+rust-style error: bad
+<fn <lambda>>
+no division by zero
+fallback: -1
+error: NameError: name `lenth` is not defined (did you mean `length`?)

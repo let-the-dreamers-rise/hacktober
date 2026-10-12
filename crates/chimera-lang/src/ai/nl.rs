@@ -20,7 +20,7 @@ use chimera_core::Span;
 
 use super::{Ask, Backend};
 use crate::ast::BinOp;
-use crate::interp::{Env, Interp, sym};
+use crate::interp::{Env, Flow, Interp, sym};
 use crate::value::*;
 
 /// The system prompt used when an instruction is translated into code.
@@ -187,6 +187,8 @@ fn rules() -> Vec<(Vec<Pat>, Act)> {
             Act::MapOp,
         ),
         ("double|triple|square|cube|negate|halve|abs|round [every|each|all] {x}".into(), Act::MapOp),
+        ("count [up] to {v}".into(), Act::CountTo),
+        ("count down from {v}".into(), Act::CountDown),
         ("[what|what's] [is] [the] sum|total [of] {x}".into(), Act::Sum),
         ("add up {x}".into(), Act::Sum),
         ("[what|what's] [is] [the] average|mean [of] {x}".into(), Act::Mean),
@@ -199,8 +201,6 @@ fn rules() -> Vec<(Vec<Pat>, Act)> {
         ("uppercase|upcase|capitalize|capitalise|lowercase|downcase|titlecase|title-case|trim|strip {x}".into(), Act::StrOp),
         ("make {x} uppercase|lowercase|capitalized|upper|lower".into(), Act::StrOp),
         ("join {x} with|using|by {v}".into(), Act::Join),
-        ("count to|up to {v}".into(), Act::CountTo),
-        ("count down from {v}".into(), Act::CountDown),
         ("clear|empty|reset {x}".into(), Act::Clear),
         ("describe|inspect|summarize|summarise|analyze|analyse {x}".into(), Act::Describe),
         ("tell me about {x}".into(), Act::Describe),
@@ -366,7 +366,17 @@ fn run_step(
             if let Some(subject) = subject_of(act, &m) {
                 *it = Some(subject);
             }
-            perform(interp, act, &m, env, span)
+            match perform(interp, act, &m, env, span) {
+                // The pattern matched but its pieces weren't code (`add pears
+                // to the inventory, seven of them`): let the model try.
+                Err(Flow::Throw(t))
+                    if interp.ai.backend != Backend::Offline
+                        && matches!(&t.value, Value::Instance(i) if i.class.has_ancestor_named("NameError") || i.class.has_ancestor_named("SyntaxError")) =>
+                {
+                    fallback(interp, step, env, span)
+                }
+                other => other,
+            }
         }
         None => fallback(interp, step, env, span),
     }
@@ -559,8 +569,13 @@ fn perform(interp: &mut Interp, act: Act, m: &Match, env: &Rc<Env>, span: Span) 
             replace(interp, &target, &v, items, env, span)
         }
         Act::Print => {
-            let v = eval_text(interp, &cap(0), env, span)?;
-            let s = interp.to_str(&v)?;
+            // `please say hello world` prints the words when they aren't an
+            // expression.
+            let text = cap(0);
+            let s = match eval_text(interp, &text, env, span) {
+                Ok(v) => interp.to_str(&v)?,
+                Err(_) => text.trim_matches(['"', '\'']).to_owned(),
+            };
             interp.write_out(&s);
             interp.write_out("\n");
             Ok(Value::Nil)
@@ -952,15 +967,14 @@ fn describe(interp: &mut Interp, name: &str, v: &Value, span: Span) -> R<String>
                 let min = nums.iter().copied().fold(f64::INFINITY, f64::min);
                 let max = nums.iter().copied().fold(f64::NEG_INFINITY, f64::max);
                 let var = nums.iter().map(|x| (x - mean).powi(2)).sum::<f64>() / n;
-                let f = crate::interp::format::fmt_float;
                 format!(
                     "{name} is a {t} of {} numbers: min {}, max {}, mean {}, std {}, sum {}",
                     items.len(),
-                    f(min),
-                    f(max),
-                    f((mean * 1000.0).round() / 1000.0),
-                    f((var.sqrt() * 1000.0).round() / 1000.0),
-                    f(sum)
+                    num(min),
+                    num(max),
+                    num((mean * 1000.0).round() / 1000.0),
+                    num((var.sqrt() * 1000.0).round() / 1000.0),
+                    num(sum)
                 )
             } else {
                 format!("{name} is a {t} of {} items", items.len())

@@ -1057,8 +1057,9 @@ pub fn train_statement(interp: &mut Interp, spec: &TrainSpec, env: &Rc<Env>) -> 
             span,
         );
     };
+    // The value is the per-epoch loss history.
     let history = train(interp, &model_value, &model, &x, &y, &opts, spec.span)?;
-    Ok(history.last().map_or(Value::Nil, |&l| Value::Float(l)))
+    Ok(Value::list(history.into_iter().map(Value::Float).collect()))
 }
 
 /// `model Name: dense 2 -> 8, relu …` defines a constructor.

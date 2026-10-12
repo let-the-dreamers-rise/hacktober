@@ -1,0 +1,57 @@
+# Machine learning is part of the syntax.
+
+# Tensors and broadcasting
+A = tensor [[1, 2], [3, 4]]
+B = tensor [[5, 6], [7, 8]]
+print(A @ B)
+print(A * 10 + 1)
+print(A.T, A.shape, A.sum(), A.mean())
+v = tensor [1, 2, 3]
+print(v.dot(v), v.norm().round(4))
+
+# Derivatives with forward-mode dual numbers: f′ and f″
+f(x) = x^3 + 2x
+print("f′(2) =", f′(2), " f″(2) =", f″(2))
+g = x => sin(x) * x
+print("g′(0) =", g′(0))
+
+# Gradients with reverse-mode autodiff: ∇
+loss(w, b) = (3 * w + b - 10) ^ 2
+print("∇loss(1, 1) =", ∇loss(1, 1))
+
+# Gradient descent by hand
+w = 0.0
+for step in range(50) {
+    grad = ∇(x => (x - 4) ^ 2)(w)
+    w -= 0.1 * grad
+}
+print("argmin ≈", round(w, 3))
+
+# A neural network learns XOR
+seed(42)
+X = tensor [[0, 0], [0, 1], [1, 0], [1, 1]]
+y = tensor [[0], [1], [1], [0]]
+model Net:
+    dense 2 -> 8, tanh
+    dense 8 -> 1, sigmoid
+net = Net()
+history = train net on X, y for 2000 epochs using adam(lr=0.05) with loss mse
+print("loss went down:", history[-1] < history[0])
+predictions = net(X).round()
+print("XOR predictions:", predictions.flatten().tolist())
+
+# PyTorch-style autograd
+import torch
+x = torch.tensor([2.0, 3.0], requires_grad=True)
+z = (x * x).sum()
+z.backward()
+print("dz/dx =", x.grad.tolist())
+
+# scikit-learn style regression
+from sklearn import LinearRegression
+xs = [[1], [2], [3], [4]]
+ys = [3, 5, 7, 9]
+reg = LinearRegression()
+reg.fit(xs, ys)
+print("slope ≈", round(reg.coef_[0], 3), "intercept ≈", round(reg.intercept_, 3))
+print("predict(10) ≈", round(reg.predict([[10]])[0], 2))

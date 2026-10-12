@@ -621,7 +621,29 @@ pub fn type_attr(interp: &mut Interp, tag: TypeTag, name: &str, span: Span) -> R
             let s = interp.printf(&fmt, &args.pos[1..], args.span)?;
             Ok(Value::str(&s))
         }),
-        (TypeTag::Str, "join") => native("String.join", |interp, args| {
+        // C#: `string.Format("{0} has {1}", a, b)`.
+        (TypeTag::Str, "Format") => native("String.Format", |interp, args| {
+            let fmt = str_arg(interp, &args, 0, "String.Format")?;
+            let s = interp.brace_format(&fmt, &args.pos[1..], &[], None, args.span)?;
+            Ok(Value::str(&s))
+        }),
+        (TypeTag::Str, "IsNullOrEmpty" | "isNullOrEmpty") => {
+            native("IsNullOrEmpty", |_interp, args| {
+                Ok(Value::Bool(match args.get(0) {
+                    None | Some(Value::Nil) => true,
+                    Some(Value::Str(s)) => s.is_empty(),
+                    _ => false,
+                }))
+            })
+        }
+        (TypeTag::Str, "Concat" | "concat") => native("String.Concat", |interp, args| {
+            let mut out = String::new();
+            for v in &args.pos {
+                out.push_str(&interp.to_str(v)?);
+            }
+            Ok(Value::str(&out))
+        }),
+        (TypeTag::Str, "join" | "Join") => native("String.join", |interp, args| {
             let sep = str_arg(interp, &args, 0, "String.join")?;
             let rest: Vec<Value> = if args.pos.len() == 2 {
                 interp.collect(&args.pos[1].clone(), args.span)?

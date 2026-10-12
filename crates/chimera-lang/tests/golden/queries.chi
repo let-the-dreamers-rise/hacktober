@@ -1,0 +1,49 @@
+# Queries over plain collections: SQL and LINQ are expressions.
+employees = [
+    {"name": "Ada", "dept": "eng", "salary": 120, "age": 36},
+    {"name": "Grace", "dept": "eng", "salary": 135, "age": 45},
+    {"name": "Linus", "dept": "ops", "salary": 95, "age": 28},
+    {"name": "Margaret", "dept": "eng", "salary": 150, "age": 52},
+    {"name": "Ken", "dept": "ops", "salary": 101, "age": 61},
+    {"name": "Barbara", "dept": "research", "salary": 140, "age": 47},
+]
+
+seniors = SELECT name, age FROM employees WHERE age > 40 ORDER BY age DESC
+for row in seniors:
+    print(row["name"], row["age"])
+
+by_dept = SELECT dept, COUNT(*) AS n, AVG(salary) AS avg_pay, MAX(salary) AS top
+          FROM employees GROUP BY dept HAVING COUNT(*) > 1 ORDER BY avg_pay DESC
+console.table(by_dept)
+
+richest = SELECT name FROM employees ORDER BY salary DESC LIMIT 2
+print([r["name"] for r in richest])
+
+print(SELECT COUNT(*) AS total, SUM(salary) AS payroll FROM employees)
+
+// LINQ (C#)
+var young = from e in employees
+            where e["age"] < 40
+            orderby e["salary"]
+            select e["name"];
+Console.WriteLine(string.Join(", ", young));
+
+# Joins
+depts = [{"dept": "eng", "floor": 3}, {"dept": "ops", "floor": 1}]
+located = SELECT e.name, d.floor FROM employees e JOIN depts d ON e.dept = d.dept WHERE d.floor > 1
+print([r["name"] for r in located])
+
+# Mutations
+INSERT INTO employees VALUES {"name": "Alan", "dept": "research", "salary": 99, "age": 41}
+UPDATE employees SET salary = salary + 10 WHERE dept = "ops"
+DELETE FROM employees WHERE age > 60
+print(len(employees), [e["salary"] for e in employees if e["dept"] == "ops"])
+
+# Objects work too
+class Item:
+    def __init__(self, name, price):
+        self.name = name
+        self.price = price
+items = [Item("pen", 2), Item("book", 15), Item("lamp", 30)]
+print(SELECT name FROM items WHERE price BETWEEN 10 AND 20)
+print(SELECT name, price * 2 AS double FROM items WHERE name LIKE "%l%")

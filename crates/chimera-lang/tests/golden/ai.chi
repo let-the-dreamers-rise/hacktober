@@ -1,0 +1,46 @@
+# AI in the syntax. Golden tests run the deterministic offline backend.
+print(ai.backend)
+print(ai "what is 6 * 7")
+print(ask "hello there")
+print(ai("summarize:", "Chimera is a programming language. It accepts many syntaxes. The weather today is fine. Chimera runs Python and Rust code side by side."))
+print(ai "translate \"hello world\" to pig latin")
+print(ai "write a haiku about rust")
+
+# Local text tools work with any backend
+review = "I absolutely love this language, it is not bad at all!"
+s = sentiment(review)
+print(s.label, s.score > 0.5)
+print(sentiment("this build is broken and slow").label)
+print(keywords("Rust and Python and Rust again: Rust wins", 2))
+print(classify("the striker scored a goal in the final", ["sports", "cooking", "politics"]))
+print(classify("preheat the oven and whisk the eggs", {
+    "sports": ["match", "team", "goal"],
+    "cooking": ["recipe", "bake", "oven", "pan"],
+}))
+print(round(similarity("the cat sat on the mat", "a cat sitting on a mat"), 2) > round(similarity("the cat sat on the mat", "stock prices fell"), 2))
+print(extract_entities("Email ada@example.com or visit https://chimera.dev", "emails"))
+e = embed("hello")
+print(e.shape)
+chain = markov("the cat sat on the mat. the dog sat on the log. the cat ran.", 1)
+print(chain.order, chain.states > 5)
+
+# Scripted replies make AI code testable
+ai.mock(["PARIS", "{\"answer\": 42}"])
+print(ai "What is the capital of France?")
+print(ai("Answer as JSON", json=true)["answer"])
+print(ai.calls)
+
+# `please` falls back to the model for instructions it doesn't know
+inventory = {"apples": 3}
+ai.mock(["inventory[\"pears\"] = 7\ninventory"])
+please add pears to the inventory, seven of them
+print(inventory)
+
+# The Anthropic SDK shapes work too
+import anthropic
+client = anthropic.Anthropic()
+ai.mock(["Hi from the SDK"])
+msg = client.messages.create(model="claude-opus-5-5", max_tokens=100, messages=[{"role": "user", "content": "Say hi"}])
+print(msg.content[0].text, msg.model)
+ai.backend = "offline"
+print(ai.backend)
