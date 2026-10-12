@@ -12,9 +12,6 @@ authors = ["Chimera contributors"]
 [workspace.dependencies]
 chimera-core = { path = "crates/chimera-core" }
 chimera-lang = { path = "crates/chimera-lang" }
-chimera-db = { path = "crates/chimera-db" }
-chimera-raft = { path = "crates/chimera-raft" }
-chimera-render = { path = "crates/chimera-render" }
 
 [workspace.lints.rust]
 unsafe_code = "forbid"
@@ -24,8 +21,8 @@ missing_debug_implementations = "warn"
 dbg_macro = "warn"
 todo = "warn"
 
-# Path tracing and chaos simulation are painfully slow unoptimised, so even
-# debug/test builds get some optimisation.
+# The tree-walking interpreter and tensor kernels are painfully slow
+# unoptimised, so even debug/test builds get some optimisation.
 [profile.dev]
 opt-level = 1
 

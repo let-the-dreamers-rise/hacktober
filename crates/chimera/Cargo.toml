@@ -1,6 +1,6 @@
 [package]
 name = "chimera"
-description = "Chimera: a programming language, SQL database, Raft cluster and path tracer in one binary"
+description = "Chimera: the shapeshifting programming language - any syntax, built-in machine learning, AI and queries"
 version.workspace = true
 edition.workspace = true
 license.workspace = true
@@ -11,9 +11,6 @@ default-run = "chimera"
 [dependencies]
 chimera-core.workspace = true
 chimera-lang.workspace = true
-chimera-db.workspace = true
-chimera-raft.workspace = true
-chimera-render.workspace = true
 
 [lints]
 workspace = true

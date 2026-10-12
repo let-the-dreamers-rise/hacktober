@@ -7,10 +7,7 @@ name = "chimera"
 version = "0.1.0"
 dependencies = [
  "chimera-core",
- "chimera-db",
  "chimera-lang",
- "chimera-raft",
- "chimera-render",
 ]
 
 [[package]]
@@ -18,28 +15,7 @@ name = "chimera-core"
 version = "0.1.0"
 
 [[package]]
-name = "chimera-db"
-version = "0.1.0"
-dependencies = [
- "chimera-core",
-]
-
-[[package]]
 name = "chimera-lang"
-version = "0.1.0"
-dependencies = [
- "chimera-core",
-]
-
-[[package]]
-name = "chimera-raft"
-version = "0.1.0"
-dependencies = [
- "chimera-core",
-]
-
-[[package]]
-name = "chimera-render"
 version = "0.1.0"
 dependencies = [
  "chimera-core",
