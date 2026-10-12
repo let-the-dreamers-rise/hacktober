@@ -255,11 +255,11 @@ fn broadcast_index_map(input: &[usize], out_shape: &[usize]) -> Vec<usize> {
     let in_strides = strides(input);
     // Stride of each output axis in the input (0 where broadcast).
     let mut eff = vec![0usize; n];
-    for i in 0..n {
+    for (i, e) in eff.iter_mut().enumerate() {
         if i + input.len() >= n {
             let j = i + input.len() - n;
             if input[j] != 1 {
-                eff[i] = in_strides[j];
+                *e = in_strides[j];
             }
         }
     }

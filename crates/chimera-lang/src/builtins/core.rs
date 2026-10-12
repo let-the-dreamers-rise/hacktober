@@ -38,7 +38,7 @@ pub fn sort_values(
         _ => items.into_iter().map(|x| (x.clone(), x)).collect(),
     };
     let cmp_fn = if comparator { func.cloned() } else { None };
-    let mut compare = |interp: &mut Interp, a: &Value, b: &Value| -> R<Ordering> {
+    let compare = |interp: &mut Interp, a: &Value, b: &Value| -> R<Ordering> {
         let o = match &cmp_fn {
             Some(f) => {
                 let r = call(interp, f, vec![a.clone(), b.clone()], span)?;

@@ -730,10 +730,6 @@ fn arg_str(interp: &mut Interp, args: &Args, i: usize, name: &str) -> R<String> 
     interp.to_str(&v)
 }
 
-fn char_index_to_byte(s: &str, i: usize) -> usize {
-    s.char_indices().nth(i).map_or(s.len(), |(b, _)| b)
-}
-
 fn str_method(interp: &mut Interp, s: &Rc<str>, name: &str, args: &Args) -> R<Option<Value>> {
     let span = args.span;
     let st: &str = s;

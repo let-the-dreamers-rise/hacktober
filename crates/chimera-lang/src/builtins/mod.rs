@@ -562,7 +562,7 @@ pub fn to_int(interp: &mut Interp, v: &Value, base: u32, span: Span) -> R {
 
 /// Static attributes of built-in types: `int.MAX`, `Integer.parseInt`,
 /// `String.valueOf`, `Object.keys`, `Number.isInteger`, `float.inf`, …
-pub fn type_attr(interp: &mut Interp, tag: TypeTag, name: &str, span: Span) -> R<Option<Value>> {
+pub fn type_attr(_interp: &mut Interp, tag: TypeTag, name: &str, span: Span) -> R<Option<Value>> {
     let _ = span;
     let native = |n: &str, f: fn(&mut Interp, Args) -> R| Some(Value::native(n, f));
     Ok(match (tag, name) {

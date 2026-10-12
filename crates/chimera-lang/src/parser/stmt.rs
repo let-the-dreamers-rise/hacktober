@@ -180,7 +180,7 @@ impl Parser<'_> {
                 {
                     return self.import_stmt();
                 }
-                "from" if next_ident && self.from_import_ahead() => return self.import_stmt(),
+                "from" if next_ident && self.import_from_follows() => return self.import_stmt(),
                 "module" if next.is_word("where") => {
                     self.skip_line();
                     return Ok(self.make_stmt(StmtKind::Pass, start));
@@ -445,11 +445,7 @@ impl Parser<'_> {
         if self.at_word("fn") {
             self.rust_ranges = true;
         }
-        if self.at_word("fun") {
-            self.kotlin_fun = true;
-        } else {
-            self.kotlin_fun = false;
-        }
+        self.kotlin_fun = self.at_word("fun");
         let r = self.fn_decl_inner(h, decorators, is_static);
         (self.rust_ranges, self.kotlin_fun) = saved;
         r
@@ -956,7 +952,7 @@ impl Parser<'_> {
     fn finish_decls(&mut self, mut stmts: Vec<Stmt>, start: Span) -> PResult<Stmt> {
         self.end_stmt()?;
         if stmts.len() == 1 {
-            return Ok(stmts.pop().ok_or(())?);
+            return stmts.pop().ok_or(());
         }
         let span = self.span_from(start);
         Ok(Stmt {
@@ -1111,7 +1107,8 @@ impl Parser<'_> {
         if self.at_op("(") {
             // C-style function definition.
             let (params, receiver) = self.params()?;
-            if self.eat_word("const") || self.eat_word("override") || self.eat_word("noexcept") {}
+            let _ =
+                self.eat_word("const") || self.eat_word("override") || self.eat_word("noexcept");
             if self.eat_word("throws") {
                 while self.peek().ident().is_some() || self.at_op(",") || self.at_op(".") {
                     self.bump();
@@ -1573,19 +1570,21 @@ impl Parser<'_> {
         if is_static {
             match &mut s.kind {
                 StmtKind::Fn(def) => Rc::make_mut(def).is_static = true,
-                StmtKind::Let { pattern, value, .. } => {
+                StmtKind::Let {
+                    pattern: Pattern::Bind(n),
+                    value,
+                    ..
+                } => {
                     // `static int count = 0;` → class attribute.
-                    if let Pattern::Bind(n) = pattern {
-                        let v = value.take().unwrap_or(Expr::new(ExprKind::Nil, s.span));
-                        let target = Expr::new(ExprKind::Name(*n), s.span);
-                        s.kind = StmtKind::Expr(Expr::new(
-                            ExprKind::Assign {
-                                target: Box::new(target),
-                                value: Box::new(v),
-                            },
-                            s.span,
-                        ));
-                    }
+                    let v = value.take().unwrap_or(Expr::new(ExprKind::Nil, s.span));
+                    let target = Expr::new(ExprKind::Name(*n), s.span);
+                    s.kind = StmtKind::Expr(Expr::new(
+                        ExprKind::Assign {
+                            target: Box::new(target),
+                            value: Box::new(v),
+                        },
+                        s.span,
+                    ));
                 }
                 _ => {}
             }
@@ -2551,8 +2550,6 @@ impl Parser<'_> {
         let start = self.bump().span;
         let body = if self.at_op("{") {
             self.brace_block()?
-        } else if self.at_newline() {
-            self.body(h, false, terms::BASE)?
         } else {
             self.body(h, false, terms::BASE)?
         };
@@ -2940,7 +2937,7 @@ impl Parser<'_> {
 
     // ----- imports and misc --------------------------------------------------------
 
-    fn from_import_ahead(&self) -> bool {
+    fn import_from_follows(&self) -> bool {
         let mut i = self.pos + 1;
         while i < self.toks.len() {
             let t = &self.toks[i];

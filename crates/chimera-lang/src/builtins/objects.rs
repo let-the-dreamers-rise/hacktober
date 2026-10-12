@@ -635,9 +635,11 @@ pub fn install(interp: &mut Interp) {
     }
 }
 
+type ListRef = Rc<RefCell<Vec<Value>>>;
+
 /// A C++ iterator pair `(v.begin(), v.end())`: iterators are `(list, index)`
 /// tuples.
-fn cpp_range(args: &[Value]) -> Option<(Rc<RefCell<Vec<Value>>>, usize, usize)> {
+fn cpp_range(args: &[Value]) -> Option<(ListRef, usize, usize)> {
     let (Some(Value::Tuple(a)), Some(Value::Tuple(b))) = (args.first(), args.get(1)) else {
         return None;
     };

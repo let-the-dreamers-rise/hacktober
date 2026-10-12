@@ -611,7 +611,7 @@ mod tests {
 
     #[test]
     fn ordering() {
-        let mut xs = vec![
+        let mut xs = [
             big("5"),
             big("-100"),
             big("99999999999999999999"),

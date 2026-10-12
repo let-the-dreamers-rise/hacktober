@@ -14,8 +14,11 @@ use crate::ml::dual::Dual;
 use crate::ml::tensor::Unary;
 use crate::value::*;
 
+/// A math function and the names it goes by.
+type UnaryEntry = (&'static [&'static str], fn(f64) -> f64);
+
 /// Unary math functions: (names, f64 implementation).
-const UNARY: &[(&[&str], fn(f64) -> f64)] = &[
+const UNARY: &[UnaryEntry] = &[
     (&["sqrt", "Sqrt", "sqrtf"], f64::sqrt),
     (&["cbrt"], f64::cbrt),
     (&["exp", "Exp"], f64::exp),

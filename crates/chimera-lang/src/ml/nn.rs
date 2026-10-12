@@ -506,16 +506,12 @@ impl Object for Sequential {
 }
 
 fn as_layer(interp: &mut Interp, v: &Value, span: Span) -> R<Rc<Layer>> {
-    if let Value::Object(o) = v {
-        if let Some(l) = o.as_any().downcast_ref::<Layer>() {
-            // Layers are shared by reference so their weights stay in sync.
-            let _ = l;
-            let rc: Rc<dyn Object> = o.clone();
-            let any: Rc<dyn Any> = rc_to_any(rc);
-            if let Ok(layer) = any.downcast::<Layer>() {
-                return Ok(layer);
-            }
-        }
+    // Layers are shared by reference so their weights stay in sync.
+    if let Value::Object(o) = v
+        && o.as_any().is::<Layer>()
+        && let Ok(layer) = rc_to_any(o.clone()).downcast::<Layer>()
+    {
+        return Ok(layer);
     }
     if let Value::Str(s) = v
         && let Some(a) = Act::parse(s)
@@ -658,11 +654,11 @@ impl Loss {
                 } else {
                     1.0
                 };
-                Ok(onehot
+                onehot
                     .mul(&logp)?
                     .sum(None)?
                     .neg()
-                    .div(&Tensor::scalar(rows))?)
+                    .div(&Tensor::scalar(rows))
             })(),
             Loss::Custom(f) => {
                 let v = call(
@@ -1014,10 +1010,8 @@ pub fn train(
         if epoch % every == 0
             || (report.is_some_and(|r| r >= 0) && epoch == epochs && every != usize::MAX)
         {
-            if !(epoch == epochs && epoch % every == 0 && false) {
-                let line = format!("epoch {epoch:>5}  loss {epoch_loss:.6}\n");
-                interp.write_out(&line);
-            }
+            let line = format!("epoch {epoch:>5}  loss {epoch_loss:.6}\n");
+            interp.write_out(&line);
         }
     }
     model.set_training(false);
@@ -1215,8 +1209,9 @@ fn solve(mut a: Vec<Vec<f64>>, mut b: Vec<f64>) -> Option<Vec<f64>> {
         b.swap(col, pivot);
         for row in col + 1..n {
             let f = a[row][col] / a[col][col];
-            for k in col..n {
-                a[row][k] -= f * a[col][k];
+            let (top, bottom) = a.split_at_mut(row);
+            for (x, p) in bottom[0][col..n].iter_mut().zip(&top[col][col..n]) {
+                *x -= f * p;
             }
             b[row] -= f * b[col];
         }

@@ -772,6 +772,7 @@ pub enum CompClause {
 
 /// SQL / LINQ operations over in-memory collections.
 #[derive(Clone, Debug)]
+#[allow(clippy::large_enum_variant)] // stored behind an `Rc` in `ExprKind::Query`
 pub enum Query {
     /// `SELECT …` / `from x in xs … select …`.
     Select(SelectQuery),

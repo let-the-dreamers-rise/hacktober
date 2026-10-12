@@ -571,8 +571,7 @@ impl<'s> Parser<'s> {
         let mut rest: Vec<(CmpOp, Expr)> = Vec::new();
         let start = lhs.span;
         let mut lhs_opt = Some(lhs);
-        loop {
-            let Some(op) = self.cmp_op()? else { break };
+        while let Some(op) = self.cmp_op()? {
             let rhs = match op {
                 CmpOpOrSpecial::Op(op) => {
                     self.skip_newlines();
@@ -938,10 +937,7 @@ impl<'s> Parser<'s> {
                 let start = self.bump().span;
                 self.yields.borrow_mut().push(start.start);
                 let mut delegate = false;
-                if self.at_word("from") && starts_expr(self.nth(1)) {
-                    self.bump();
-                    delegate = true;
-                } else if self.at_op("*") {
+                if self.at_word("from") && starts_expr(self.nth(1)) || self.at_op("*") {
                     self.bump();
                     delegate = true;
                 }
@@ -2565,10 +2561,6 @@ impl<'s> Parser<'s> {
 
     /// Ruby's `puts (1..10).to_a`: a spaced `(` whose group is followed by
     /// `.`, `[` or an operator is the start of the argument, not call parens.
-    fn paren_starts_argument(&self) -> bool {
-        self.paren_starts_argument_at(0)
-    }
-
     fn paren_starts_argument_at(&self, offset: usize) -> bool {
         let toks = self.toks_ref();
         let mut depth = 0;
@@ -3477,10 +3469,8 @@ impl<'s> Parser<'s> {
                 guard,
                 body,
             });
-            if inline && !self.at_op(";") {
-                if !self.at_newline() {
-                    break;
-                }
+            if inline && !self.at_op(";") && !self.at_newline() {
+                break;
             }
         }
         Ok(arms)
@@ -3577,18 +3567,18 @@ impl<'s> Parser<'s> {
     }
 
     fn when_body(&mut self, wh: Header) -> PResult<Block> {
-        if self.eat_word("then") || self.eat_word("THEN") || self.eat_op(":") || self.eat_op("->") {
-            if !self.at_newline() {
-                let mut stmts = Vec::new();
-                while !self.at_newline()
-                    && !self.at_eof()
-                    && !self.at_any_word(&["when", "WHEN", "else", "ELSE", "end", "END"])
-                {
-                    stmts.push(self.statement()?);
-                    self.eat_op(";");
-                }
-                return Ok(Block::new(stmts));
+        if (self.eat_word("then") || self.eat_word("THEN") || self.eat_op(":") || self.eat_op("->"))
+            && !self.at_newline()
+        {
+            let mut stmts = Vec::new();
+            while !self.at_newline()
+                && !self.at_eof()
+                && !self.at_any_word(&["when", "WHEN", "else", "ELSE", "end", "END"])
+            {
+                stmts.push(self.statement()?);
+                self.eat_op(";");
             }
+            return Ok(Block::new(stmts));
         }
         self.skip_separators();
         let mut stmts = Vec::new();

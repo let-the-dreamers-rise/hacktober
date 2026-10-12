@@ -282,7 +282,7 @@ pub struct Generator {
 
 impl Generator {
     /// Creates a generator for `def` whose parameters are bound in `env`.
-    pub fn new(
+    pub fn start(
         interp: &mut Interp,
         def: &Rc<FnDef>,
         name: Rc<str>,
@@ -759,7 +759,7 @@ impl Interp {
         }
         let span = args.span;
         self.bind_params(&c.def, args, &env)?;
-        Generator::new(self, &c.def, c.name(), env, receiver, span)
+        Generator::start(self, &c.def, c.name(), env, receiver, span)
     }
 }
 

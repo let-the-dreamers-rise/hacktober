@@ -371,7 +371,7 @@ pub fn module(_interp: &mut Interp) -> Value {
         let s = stringify(interp, &v, indent, 0)?;
         Ok(Value::str(&s))
     });
-    let m = make_module(
+    make_module(
         "json",
         vec![
             ("parse", parse_fn.clone()),
@@ -384,8 +384,7 @@ pub fn module(_interp: &mut Interp) -> Value {
             ("Marshal", dump_fn.clone()),
             ("generate", dump_fn),
         ],
-    );
-    m
+    )
 }
 
 #[cfg(test)]

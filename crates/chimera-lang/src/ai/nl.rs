@@ -294,12 +294,11 @@ fn steps(text: &str) -> Vec<String> {
 pub fn please(interp: &mut Interp, text: &str, env: &Rc<Env>, span: Span) -> R {
     // `please("sort xs")`, `please "sort xs"`, `please instruction_var`.
     let t = text.trim();
-    if t.starts_with(['(', '"', '\''])
-        || (!t.contains(' ') && env.get(sym(t)).is_some_and(|v| matches!(v, Value::Str(_))))
+    if (t.starts_with(['(', '"', '\''])
+        || (!t.contains(' ') && env.get(sym(t)).is_some_and(|v| matches!(v, Value::Str(_)))))
+        && let Ok(Value::Str(s)) = eval_text(interp, t, env, span)
     {
-        if let Ok(Value::Str(s)) = eval_text(interp, t, env, span) {
-            return please(interp, &s, env, span);
-        }
+        return please(interp, &s, env, span);
     }
     let mut last = Value::Nil;
     let mut it: Option<String> = None;

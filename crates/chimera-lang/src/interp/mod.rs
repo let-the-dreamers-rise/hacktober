@@ -181,10 +181,7 @@ impl Env {
             if let Some(v) = env.get_local(s) {
                 return Some(v);
             }
-            match &env.parent {
-                Some(p) => env = p,
-                None => return None,
-            }
+            env = env.parent.as_ref()?;
         }
     }
 
@@ -343,7 +340,6 @@ pub struct Interp {
     pub(crate) aggregates: Vec<HashMap<usize, Value>>,
     /// Environment of the innermost native call site (for `eval`, `please`).
     pub(crate) call_env: Option<Rc<Env>>,
-    pub(crate) training: bool,
     /// Whether a function named `main` has been called (for auto-running
     /// `main` in Go, Rust, C, Java, Kotlin and Haskell programs).
     pub main_called: bool,
@@ -384,7 +380,6 @@ impl Interp {
             rows: Vec::new(),
             aggregates: Vec::new(),
             call_env: None,
-            training: false,
             main_called: false,
         };
         crate::builtins::install(&mut interp);
@@ -936,10 +931,10 @@ impl Interp {
 
     fn run_defers(&mut self, deferred: Vec<(Block, Rc<Env>)>, mut result: R) -> R {
         for (block, env) in deferred.into_iter().rev() {
-            if let Err(e) = self.eval_block(&block, &env) {
-                if !matches!(e, Flow::Return(_)) {
-                    result = Err(e);
-                }
+            if let Err(e) = self.eval_block(&block, &env)
+                && !matches!(e, Flow::Return(_))
+            {
+                result = Err(e);
             }
         }
         result

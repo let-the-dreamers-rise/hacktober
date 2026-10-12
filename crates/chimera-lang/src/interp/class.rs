@@ -1000,7 +1000,7 @@ impl Interp {
         step: Option<&Expr>,
         env: &Rc<Env>,
     ) -> R<(Option<i64>, Option<i64>, i64)> {
-        let mut get = |e: Option<&Expr>, interp: &mut Interp| -> R<Option<i64>> {
+        let get = |e: Option<&Expr>, interp: &mut Interp| -> R<Option<i64>> {
             match e {
                 None => Ok(None),
                 Some(e) => {
@@ -1080,8 +1080,7 @@ impl Interp {
         if let Value::Range(r) = idx
             && !matches!(obj, Value::Map(_))
         {
-            let end = if r.step > 0 { r.end } else { r.end };
-            return self.slice_value(obj, Some(r.start), Some(end), r.step, span);
+            return self.slice_value(obj, Some(r.start), Some(r.end), r.step, span);
         }
         match obj {
             Value::List(l) => {

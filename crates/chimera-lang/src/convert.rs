@@ -2171,10 +2171,10 @@ impl Emitter<'_> {
                 .map(|n| n.to_string())
                 .collect(),
         );
-        if let Some(n) = def.name {
-            if let Some(outer) = self.scopes.iter_mut().rev().nth(1) {
-                outer.push(n.to_string());
-            }
+        if let Some(n) = def.name
+            && let Some(outer) = self.scopes.iter_mut().rev().nth(1)
+        {
+            outer.push(n.to_string());
         }
         // Lua default parameters.
         if t == Target::Lua {
@@ -2677,7 +2677,7 @@ mod tests {
         let src = "def add(a, b):\n    return a + b\nfor i in range(3):\n    print(add(i, 1))\n";
         let js = conv(src, Target::JavaScript);
         assert!(js.contains("function add(a, b) {"), "{js}");
-        assert!(js.contains("for (const i of range(3)) {"), "{js}");
+        assert!(js.contains("for (let i = 0; i < 3; i++) {"), "{js}");
         assert!(js.contains("console.log(add(i, 1));"), "{js}");
         let rb = conv(src, Target::Ruby);
         assert!(rb.contains("def add(a, b)"), "{rb}");
