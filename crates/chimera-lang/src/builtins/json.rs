@@ -212,7 +212,7 @@ pub fn stringify(interp: &mut Interp, v: &Value, indent: Option<usize>, depth: u
     stringify_with(interp, v, indent, depth, false)
 }
 
-/// Like [`stringify`]; `spaced` uses Python's `", "` and `": "` separators.
+/// Like [`stringify()`]; `spaced` uses Python's `", "` and `": "` separators.
 pub fn stringify_with(
     interp: &mut Interp,
     v: &Value,

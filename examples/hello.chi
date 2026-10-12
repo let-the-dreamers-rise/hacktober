@@ -1,0 +1,50 @@
+# One program, many languages: every line below is ordinary Chimera.
+
+def fizzbuzz(n):                                  # Python
+    return "FizzBuzz" if n % 15 == 0 else "Fizz" if n % 3 == 0 else "Buzz" if n % 5 == 0 else str(n)
+
+const words = [1, 2, 3, 4, 5, 15].map(fizzbuzz);  // JavaScript
+puts words.join(" ")                              # Ruby
+
+fn collatz(mut n: u64) -> u64 {                   // Rust
+    let mut steps = 0;
+    while n != 1 {
+        n = if n % 2 == 0 { n / 2 } else { 3 * n + 1 };
+        steps += 1;
+    }
+    steps
+}
+
+func longest(limit int) (int, int) {              // Go
+    best, arg := 0, 0
+    for i := 1; i < limit; i++ {
+        if s := collatz(i); s > best {
+            best, arg = s, i
+        }
+    }
+    return arg, best
+}
+
+n, steps = longest(1000)
+printf("Longest Collatz chain under 1000: %d (%d steps)\n", n, steps)   // C
+
+squares = [x * x | x <- [1..10], even x]          -- Haskell
+local total = 0                                   -- Lua
+for _, s in ipairs(squares) do total = total + s end
+print("sum of even squares:", total)
+
+data class Planet(val name: String, val moons: Int)       // Kotlin
+planets = listOf(Planet("Earth", 1), Planet("Mars", 2), Planet("Jupiter", 95))
+busy = SELECT name FROM planets WHERE moons > 1 ORDER BY moons DESC   -- SQL
+print(busy.map(p => p["name"]))
+
+f(x) = x^2 * sin(x)                               # math
+print("f′(π) ≈", round(f′(π), 4))
+
+set greeting to "hello"                           # English
+please capitalize greeting
+say greeting, "from", len(planets), "planets"
+
+big = 2 ** 200                                    # arbitrary precision
+print(len(str(big)), "digits")
+print(sentiment("Chimera is a wonderful, delightful mess").label)   # AI

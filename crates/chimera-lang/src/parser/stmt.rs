@@ -105,7 +105,9 @@ impl Parser<'_> {
                 f if FN_WORDS.contains(&f) => {
                     let lambda_form =
                         matches!(f, "fun" | "proc" | "fn" | "function") && self.nth_is_op(2, "->");
-                    if next_ident && !lambda_form {
+                    // JavaScript generator functions: `function* name()`.
+                    let js_generator = f == "function" && next.is_op("*") && self.nth(2).ident().is_some();
+                    if next_ident && !lambda_form || js_generator {
                         return self.fn_decl(h, Vec::new(), false);
                     }
                     if f == "func"
@@ -460,6 +462,7 @@ impl Parser<'_> {
         let kw = self.bump();
         let start = kw.span;
         let keyword = kw.ident().unwrap_or("fn").to_owned();
+        self.eat_op("*"); // `function* gen()`
 
         // Ruby `def self.name` / `def ClassName.name` / Lua `function M.name`
         // / Lua `function obj:method` / Kotlin `fun String.shout()`.
@@ -2282,6 +2285,27 @@ impl Parser<'_> {
         })
     }
 
+    /// Whether the bracket group starting here is followed by the word `w`.
+    fn paren_group_then_word(&self, w: &str) -> bool {
+        let mut depth = 0;
+        let mut i = 0;
+        loop {
+            let t = self.nth(i);
+            match &t.tok {
+                Tok::Op("(" | "[" | "{") => depth += 1,
+                Tok::Op(")" | "]" | "}") => {
+                    depth -= 1;
+                    if depth == 0 {
+                        return self.nth_is_word(i + 1, w);
+                    }
+                }
+                Tok::Eof => return false,
+                _ => {}
+            }
+            i += 1;
+        }
+    }
+
     /// Whether the current line ends with `{`.
     fn line_ends_with_brace(&self) -> bool {
         let line = self.peek().line;
@@ -2297,7 +2321,8 @@ impl Parser<'_> {
     fn for_stmt(&mut self, h: Header) -> PResult<Stmt> {
         let start = self.bump().span;
         let _each = self.eat_word("each") || self.eat_word("every");
-        let parens = self.at_op("(");
+        // `for (a, b) in pairs:` is a tuple pattern, not header parentheses.
+        let parens = self.at_op("(") && !self.paren_group_then_word("in");
         if self.c_for_ahead() {
             return self.c_for(h, start);
         }

@@ -4,8 +4,8 @@
 //! [`Generator`] without running any code. Each `next()` resumes the body
 //! until the next `yield`. The interpreter is a recursive tree walker, so a
 //! paused generator can't keep a Rust stack; instead the body is compiled
-//! into a small tree of [`GStmt`]s and run by a stepper that keeps its
-//! position in an explicit stack of [`Frame`]s.
+//! into a small tree of `GStmt`s and run by a stepper that keeps its
+//! position in an explicit stack of `Frame`s.
 //!
 //! Statements that contain no `yield` run atomically on the main
 //! interpreter. `yield` may appear as a statement, as an assignment or

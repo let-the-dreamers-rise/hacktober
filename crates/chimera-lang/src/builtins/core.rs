@@ -95,7 +95,9 @@ pub fn sort_values(
 fn fn_and_seq(interp: &mut Interp, args: &Args, name: &str) -> R<(Value, Value)> {
     let a = arg(interp, args, 0, name)?;
     let b = arg(interp, args, 1, name)?;
-    if a.is_callable() && !b.is_callable() {
+    // Either order works: `filter(f, xs)` (Python/Haskell) or `filter(xs, f)`.
+    let is_fn = |v: &Value| matches!(v, Value::Func(_) | Value::Native(_) | Value::Bound(_));
+    if is_fn(&a) && !is_fn(&b) || a.is_callable() && !b.is_callable() {
         Ok((a, b))
     } else {
         Ok((b, a))
@@ -1224,8 +1226,16 @@ pub fn install(interp: &mut Interp) {
             (b, a)
         };
         let n = n.as_int().unwrap_or(0).max(0) as usize;
-        let items = interp.collect(&xs, args.span)?;
-        Ok(Value::list(items.into_iter().take(n).collect()))
+        // Lazy, so `take(5, iterate(f, x))` works on infinite generators.
+        let mut it = interp.iterate(&xs, args.span)?;
+        let mut items = Vec::with_capacity(n.min(1 << 16));
+        while items.len() < n {
+            match it.next(interp)? {
+                Some(x) => items.push(x),
+                None => break,
+            }
+        }
+        Ok(Value::list(items))
     });
     def(interp, &["drop", "skip"], |interp, args| {
         let (a, b) = (
@@ -1244,7 +1254,8 @@ pub fn install(interp: &mut Interp) {
     def(interp, &["takeWhile", "take_while"], |interp, args| {
         let (f, xs) = fn_and_seq(interp, &args, "takeWhile")?;
         let mut out = Vec::new();
-        for x in interp.collect(&xs, args.span)? {
+        let mut it = interp.iterate(&xs, args.span)?;
+        while let Some(x) = it.next(interp)? {
             if !call(interp, &f, vec![x.clone()], args.span)?.truthy() {
                 break;
             }

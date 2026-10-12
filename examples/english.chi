@@ -1,0 +1,18 @@
+# Plain English is a dialect too.
+set price to 20
+set quantity to 3
+say "subtotal:", price times quantity
+increase price by 5
+if price is greater than 22 then say "price went up" otherwise say "price is steady"
+repeat 2 times
+    say "thank you for shopping!"
+end
+say "the square root of 2 is about", round(the square root of 2, 4)
+
+# `please` handles everyday chores on your data.
+grades = [72, 95, 88, 61, 79]
+please sort grades descending
+please print grades
+please keep the even numbers in grades
+please describe grades
+please plot {"mon": 3, "tue": 7, "wed": 5}

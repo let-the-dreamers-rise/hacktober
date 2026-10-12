@@ -1,0 +1,31 @@
+# SQL is an expression in Chimera: query lists, maps and objects directly.
+sales = [
+    {"region": "north", "rep": "ana", "amount": 1200, "month": 1},
+    {"region": "north", "rep": "bo", "amount": 800, "month": 1},
+    {"region": "south", "rep": "cy", "amount": 1500, "month": 1},
+    {"region": "south", "rep": "cy", "amount": 900, "month": 2},
+    {"region": "north", "rep": "ana", "amount": 1700, "month": 2},
+    {"region": "east", "rep": "di", "amount": 400, "month": 2},
+]
+
+summary = SELECT region, COUNT(*) AS deals, SUM(amount) AS revenue, AVG(amount) AS avg_deal
+          FROM sales GROUP BY region ORDER BY revenue DESC
+console.table(summary)
+
+top_reps = SELECT rep, SUM(amount) AS total FROM sales GROUP BY rep HAVING SUM(amount) > 1000 ORDER BY total DESC
+print("top reps:", [r["rep"] for r in top_reps])
+
+targets = [{"region": "north", "target": 3000}, {"region": "south", "target": 2000}]
+vs_target = SELECT s.region, SUM(s.amount) AS actual, t.target
+            FROM sales s JOIN targets t ON s.region = t.region
+            GROUP BY s.region
+for row in vs_target:
+    status = "hit" if row["actual"] >= row["target"] else "missed"
+    print(f"{row['region']}: {row['actual']} vs {row['target']} — {status}")
+
+// The same data through LINQ
+var bigDeals = from s in sales
+               where s["amount"] >= 1000
+               orderby s["amount"] descending
+               select s["rep"] + ":" + s["amount"];
+Console.WriteLine(string.Join(", ", bigDeals));

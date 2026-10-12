@@ -1,0 +1,18 @@
+# Integers never overflow: they grow into arbitrary precision.
+def factorial(n) = 1 if n <= 1 else n * factorial(n - 1)
+print("50! =", factorial(50))
+print("2^256 =", 2 ** 256)
+
+# Fibonacci number 300, computed by fast doubling.
+def fib(n):
+    if n == 0:
+        return (0, 1)
+    a, b = fib(n // 2)
+    c = a * (2 * b - a)
+    d = a * a + b * b
+    return (d, c + d) if n % 2 else (c, d)
+print("fib(300) =", fib(300)[0])
+
+# Exact integer arithmetic for big modular exponentiation.
+print("3^1000 mod 1000007 =", pow(3, 1000, 1000007))
+print("digits in 1000!:", len(str(factorial(1000))))

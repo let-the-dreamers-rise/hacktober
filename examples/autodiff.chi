@@ -1,0 +1,31 @@
+# Derivatives are operators: f′ (forward mode) and ∇f (reverse mode).
+
+f(x) = x^3 - 2x^2 + x
+print("f(2) =", f(2), " f′(2) =", f′(2), " f″(2) =", f″(2))
+
+# Newton's method finds a root of g using its derivative.
+g(x) = cos(x) - x
+x = 1.0
+repeat 6 times
+    x = x - g(x) / g′(x)
+end
+print("cos(x) = x at x ≈", round(x, 10))
+
+# ∇ takes the gradient of a function of several variables.
+rosenbrock(a, b) = (1 - a)^2 + 100 * (b - a^2)^2
+print("∇rosenbrock(0, 0) =", ∇rosenbrock(0, 0))
+
+# Gradient descent on the Rosenbrock valley.
+a, b = -1.5, 2.0
+for step in range(4000) {
+    da, db = ∇rosenbrock(a, b)
+    a -= 0.001 * da
+    b -= 0.001 * db
+}
+print("minimum near", round(a, 3), round(b, 3))
+
+# Tensors carry gradients too (PyTorch-style).
+w = tensor([1.0, -2.0, 3.0], requires_grad=True)
+loss = (w * w).sum()
+loss.backward()
+print("d(loss)/dw =", w.grad.tolist())

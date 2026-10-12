@@ -134,53 +134,55 @@ pub(crate) fn is_reserved(w: &str) -> bool {
 
 /// Words that act as infix operators.
 pub(crate) fn is_operator_word(w: &str) -> bool {
-    matches!(
-        w.to_ascii_lowercase().as_str(),
-        "and"
-            | "or"
-            | "in"
-            | "is"
-            | "if"
-            | "unless"
-            | "while"
-            | "until"
-            | "then"
-            | "do"
-            | "else"
-            | "end"
-            | "as"
-            | "of"
-            | "to"
-            | "by"
-            | "mod"
-            | "div"
-            | "xor"
-            | "plus"
-            | "minus"
-            | "times"
-            | "divided"
-            | "multiplied"
-            | "modulo"
-            | "equals"
-            | "squared"
-            | "cubed"
-            | "with"
-            | "step"
-            | "downto"
-            | "through"
-            | "like"
-            | "between"
-            | "not"
-            | "contains"
-            | "matches"
-            | "over"
-            | "where"
-            | "when"
-            | "otherwise"
-            | "elif"
-            | "for"
-            | "on"
-    )
+    // Haskell backtick infix names (`mod`) are operators.
+    w.starts_with('`')
+        || matches!(
+            w.to_ascii_lowercase().as_str(),
+            "and"
+                | "or"
+                | "in"
+                | "is"
+                | "if"
+                | "unless"
+                | "while"
+                | "until"
+                | "then"
+                | "do"
+                | "else"
+                | "end"
+                | "as"
+                | "of"
+                | "to"
+                | "by"
+                | "mod"
+                | "div"
+                | "xor"
+                | "plus"
+                | "minus"
+                | "times"
+                | "divided"
+                | "multiplied"
+                | "modulo"
+                | "equals"
+                | "squared"
+                | "cubed"
+                | "with"
+                | "step"
+                | "downto"
+                | "through"
+                | "like"
+                | "between"
+                | "not"
+                | "contains"
+                | "matches"
+                | "over"
+                | "where"
+                | "when"
+                | "otherwise"
+                | "elif"
+                | "for"
+                | "on"
+        )
 }
 
 /// Functions printed by command calls such as `puts [1, 2]`.
@@ -432,6 +434,27 @@ impl<'s> Parser<'s> {
                 && let Some(e) = self.comparison(lhs.clone())?
             {
                 lhs = e;
+                continue;
+            }
+            // Haskell backtick infix: `a `div` b` is `div(a, b)`.
+            if let Some(w) = t.ident()
+                && w.starts_with('`')
+                && w.ends_with('`')
+                && w.len() > 2
+                && min <= bp::MUL
+            {
+                let f = Sym::new(&w[1..w.len() - 1]);
+                self.bump();
+                let rhs = self.expr_bp(bp::MUL + 1)?;
+                let span = start.to(rhs.span);
+                let callee = Expr::new(ExprKind::Name(f), t.span);
+                lhs = Expr::new(
+                    ExprKind::Call {
+                        callee: Box::new(callee),
+                        args: vec![Arg::Pos(lhs), Arg::Pos(rhs)],
+                    },
+                    span,
+                );
                 continue;
             }
             if let Some((op, lbp, rbp)) = self.binary_op() {
@@ -3237,7 +3260,11 @@ impl<'s> Parser<'s> {
         if word == "when" {
             return self.kotlin_when(start);
         }
-        if word == "case" && (self.at_word("when") || self.at_word("WHEN")) {
+        if word == "case"
+            && (self.at_word("when")
+                || self.at_word("WHEN")
+                || self.at_newline() && self.peek_past_newlines().is_word("when"))
+        {
             // Subject-less `case when c then v … else v end` (SQL, Ruby).
             let arms = self.when_arms(h, None)?;
             self.maybe_end(h);

@@ -10,7 +10,7 @@
 //!    (Python's offside rule, enforced by *columns* rather than INDENT tokens
 //!    so it nests inside braces), `do/then/begin … end`, a single `=> expr`,
 //!    or just a newline followed by statements up to an `end`-like keyword
-//!    (`end`, `fi`, `done`, `endif`, …). See [`Parser::body`].
+//!    (`end`, `fi`, `done`, `endif`, …). See `Parser::body`.
 //! 2. **Contextual keywords.** The lexer never reserves words; the parser
 //!    decides from context whether `end`, `to`, `times` or `select` is a
 //!    keyword or an identifier.
@@ -19,9 +19,9 @@
 //!    modifier) the parser snapshots its position, tries one reading, and
 //!    rewinds if it does not fit.
 //!
-//! Submodules: [`stmt`] (declarations and control flow), [`expr`]
-//! (expressions), [`pattern`] (patterns and type annotations), [`query`]
-//! (SQL/LINQ) and [`ml`] (`model`/`train`).
+//! Submodules: `stmt` (declarations and control flow), `expr`
+//! (expressions), `pattern` (patterns and type annotations), `query`
+//! (SQL/LINQ) and `ml` (`model`/`train`).
 
 mod expr;
 mod ml;

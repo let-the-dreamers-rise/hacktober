@@ -1,0 +1,27 @@
+# AI in the syntax. With ANTHROPIC_API_KEY set, `ai` talks to Claude;
+# without it, a deterministic offline assistant answers what it can.
+print("backend:", ai.backend)
+
+answer = ai "what is 17 * 23"
+print(answer)
+print(ai "write a haiku about compilers")
+
+# Local text tools work everywhere, offline or not.
+reviews = [
+    "Absolutely love it, the REPL is wonderful!",
+    "The build is broken and the docs are confusing.",
+    "It compiles.",
+]
+for r in reviews:
+    s = sentiment(r)
+    print(f"{s.label:>8} {s.score:+.2f}  {r}")
+
+print(summarize("Chimera runs many languages. It was built for Hacktoberfest. " +
+                "The interpreter is written in Rust. Anyone can add a dialect.", 2))
+print(classify("the striker scored twice in the final", ["sports", "politics", "cooking"]))
+
+# `please` turns English into actions.
+todo = ["write docs", "fix bug", "ship it"]
+please reverse todo and then print todo
+please add "celebrate" to todo
+please describe todo

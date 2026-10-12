@@ -239,6 +239,28 @@ impl<'a> Lexer<'a> {
         }
     }
 
+    /// A backticked identifier between two operands is a Haskell infix
+    /// call; elsewhere a backtick starts a JavaScript template string.
+    fn at_backtick_infix(&self) -> bool {
+        let operand_before = self.tokens.last().is_some_and(|t| {
+            t.line == self.line
+                && (matches!(
+                    t.tok,
+                    Tok::Int(_) | Tok::Float(_) | Tok::BigInt(_) | Tok::Ident(_)
+                ) || matches!(t.tok, Tok::Op(")" | "]")))
+        });
+        if !operand_before {
+            return false;
+        }
+        let rest = &self.src[self.pos + 1..self.end];
+        let len: usize = rest
+            .chars()
+            .take_while(|&c| is_ident_continue(c) || c == '\'')
+            .map(char::len_utf8)
+            .sum();
+        len > 0 && rest[len..].starts_with('`') && rest.chars().next().is_some_and(is_ident_start)
+    }
+
     /// `(* comment *)` (OCaml, Pascal), as opposed to the Haskell section
     /// `(* 3)`: the comment closes with `*)` before any other `)`.
     fn at_ocaml_comment(&self) -> bool {
@@ -481,6 +503,13 @@ impl<'a> Lexer<'a> {
                         self.pos += 1;
                     }
                     self.space_before = true;
+                }
+                '`' if self.at_backtick_infix() => {
+                    // Haskell infix application: `n `mod` 3`, `a `div` b`.
+                    self.pos += 1;
+                    let name = self.ident_text();
+                    self.pos += 1;
+                    self.push(Tok::Ident(format!("`{name}`")), start);
                 }
                 '"' | '\'' | '`' => self.string(start, ""),
                 '$' => self.dollar(start),

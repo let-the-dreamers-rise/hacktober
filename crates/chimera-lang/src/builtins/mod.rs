@@ -152,7 +152,7 @@ pub fn call_flex(interp: &mut Interp, f: &Value, args: Vec<Value>, span: Span) -
     };
     let mut args = args;
     if wanted < args.len() {
-        args.truncate(wanted.max(1).min(args.len()));
+        args.truncate(wanted);
     }
     call(interp, f, args, span)
 }

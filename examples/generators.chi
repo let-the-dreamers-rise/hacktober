@@ -1,0 +1,59 @@
+# Lazy, infinite generators — and Ruby blocks that `yield` to them.
+
+def naturals():
+    n = 1
+    while True:
+        yield n
+        n += 1
+
+def primes():
+    found = []
+    for n in naturals():
+        if n > 1 and all(n % p != 0 for p in found if p * p <= n):
+            found.append(n)
+            yield n
+
+def take(n, gen):
+    out = []
+    for x in gen:
+        if len(out) == n:
+            break
+        out.append(x)
+    return out
+
+print("first 15 primes:", take(15, primes()))
+
+function* fibonacci() {
+  let [a, b] = [0, 1];
+  while (true) {
+    yield a;
+    [a, b] = [b, a + b];
+  }
+}
+const fib = fibonacci();
+console.log("fibonacci:", [...Array(12)].map(() => fib.next()));
+
+# Generators can receive values: a running average.
+def averager():
+    total, count = 0, 0
+    average = None
+    while True:
+        value = yield average
+        total += value
+        count += 1
+        average = total / count
+
+avg = averager()
+next(avg)
+for x in [10, 20, 60]:
+    print("average so far:", avg.send(x))
+
+# In Ruby, `yield` calls the block a method was given.
+def each_pair(list)
+  i = 0
+  while i < list.length - 1
+    yield list[i], list[i + 1]
+    i += 1
+  end
+end
+each_pair([1, 4, 9, 16]) { |a, b| puts "#{a} -> #{b} (+#{b - a})" }

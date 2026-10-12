@@ -121,3 +121,29 @@ def Triple(a, b, c) = (a, b, c)
 def repeat_n(n, f) {
     for i in range(n) { f(i) }
 }
+
+// Haskell's Prelude, for code written in that style.
+def mod(a, b) = a % b
+def div(a, b) = a // b
+def quot(a, b) = int(a / b)
+def rem(a, b) = a - b * quot(a, b)
+def negate(x) = -x
+def uncurry(f) = fn(pair) => f(pair[0], pair[1])
+def lookup(key, pairs) {
+    for pair in pairs {
+        if pair[0] == key { return pair[1] }
+    }
+    nil
+}
+def splitAt(n, xs) = (xs[:n], xs[n:])
+def span(p, xs) {
+    let i = 0
+    while i < len(xs) and p(xs[i]) { i += 1 }
+    (xs[:i], xs[i:])
+}
+def iterate(f, x) {
+    while true {
+        yield x
+        x = f(x)
+    }
+}

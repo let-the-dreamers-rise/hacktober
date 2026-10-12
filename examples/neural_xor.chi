@@ -1,0 +1,19 @@
+# A neural network learns XOR, declared with the `model` syntax and
+# trained with the `train` statement.
+
+seed(7)
+X = tensor [[0, 0], [0, 1], [1, 0], [1, 1]]
+y = tensor [[0], [1], [1], [0]]
+
+model XorNet:
+    dense 2 -> 16, tanh
+    dense 16 -> 1, sigmoid
+
+net = XorNet()
+net.summary()
+history = train net on X, y for 1500 epochs using adam(lr=0.03) with loss bce reporting every 500
+
+for (inputs, target) in zip(X.tolist(), y.tolist()):
+    guess = net(tensor([inputs])).item()
+    print(f"{inputs} -> {guess:.3f} (want {target[0]})")
+print(f"final loss {history[-1]:.5f}")
