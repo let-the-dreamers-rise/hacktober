@@ -44,7 +44,7 @@ jobs:
       - run: rustup toolchain install || rustup show  # installs the toolchain from rust-toolchain.toml
       - uses: Swatinem/rust-cache@v2
       # The transpiler round-trip test runs the generated code on these.
-      - uses: actions/setup-python@v5
+      - uses: actions/setup-python@v7
         with:
           python-version: "3.12"
       - uses: actions/setup-node@v4
