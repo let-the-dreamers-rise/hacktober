@@ -1059,6 +1059,7 @@ impl Parser<'_> {
 
     /// `var`/`const`/`val`/`my`/`local`/`auto`/`dim` declarations.
     fn decl_stmt(&mut self) -> PResult<Stmt> {
+        let lua = self.at_word("local");
         let start = self.bump().span;
         self.eat_word("mut");
         let mut stmts = vec![self.declarator(start)?];
@@ -1066,6 +1067,16 @@ impl Parser<'_> {
             self.bump();
             let s = self.peek().span;
             stmts.push(self.declarator(s)?);
+        }
+        if lua {
+            // Lua tables: `local t = {10, 20, 30}` is a list, not a set.
+            for s in &mut stmts {
+                if let StmtKind::Let { value: Some(v), .. } = &mut s.kind
+                    && let ExprKind::Set(items) = &mut v.kind
+                {
+                    v.kind = ExprKind::List(std::mem::take(items));
+                }
+            }
         }
         self.finish_decls(stmts, start)
     }

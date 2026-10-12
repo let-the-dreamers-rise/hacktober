@@ -263,6 +263,64 @@ impl<'a> Lexer<'a> {
 
     /// `(* comment *)` (OCaml, Pascal), as opposed to the Haskell section
     /// `(* 3)`: the comment closes with `*)` before any other `)`.
+    /// `#define NAME value` / `#define SQ(x) ((x) * (x))` at the start of a
+    /// line.
+    fn at_define(&self) -> bool {
+        let rest = self.rest();
+        rest.starts_with("#define")
+            && rest[7..].starts_with([' ', '\t'])
+            && rest[7..].trim_start().starts_with(is_ident_start)
+    }
+
+    /// Lexes a C `#define` as the definition it stands for: `NAME = value`
+    /// or, for function-like macros, the math-style `SQ(x) = ((x) * (x))`.
+    fn define(&mut self) {
+        self.pos += "#define".len();
+        while matches!(self.peek(), Some(' ' | '\t')) {
+            self.pos += 1;
+        }
+        let name = self.pos;
+        let name_text = self.ident_text();
+        self.push(Tok::Ident(name_text), name);
+        if self.peek() == Some('(') {
+            let open = self.pos;
+            self.pos += 1;
+            self.push(Tok::Op("("), open);
+            loop {
+                while matches!(self.peek(), Some(' ' | '\t')) {
+                    self.pos += 1;
+                    self.space_before = true;
+                }
+                let at = self.pos;
+                match self.peek() {
+                    Some(c) if is_ident_start(c) => {
+                        let param = self.ident_text();
+                        self.push(Tok::Ident(param), at);
+                    }
+                    Some(',') => {
+                        self.pos += 1;
+                        self.push(Tok::Op(","), at);
+                    }
+                    Some(')') => {
+                        self.pos += 1;
+                        self.push(Tok::Op(")"), at);
+                        break;
+                    }
+                    _ => break,
+                }
+            }
+        }
+        let at = self.pos;
+        self.space_before = true;
+        self.push(Tok::Op("="), at);
+        // `#define DEBUG` with no body defines a flag.
+        let body = self.rest().split('\n').next().unwrap_or("").trim();
+        if body.is_empty() || body.starts_with("//") || body.starts_with("/*") {
+            self.space_before = true;
+            self.push(Tok::Ident("true".to_owned()), at);
+        }
+    }
+
     fn at_ocaml_comment(&self) -> bool {
         let rest = self.rest();
         if !rest.starts_with("(*") || rest.starts_with("(*)") {
@@ -377,7 +435,10 @@ impl<'a> Lexer<'a> {
             return false;
         }
         let rest = &self.src[self.pos + 2..self.end];
-        let line = rest.split('\n').next().unwrap_or("").trim();
+        let line = rest.split('\n').next().unwrap_or("");
+        // A later `//` on the same line starts a trailing comment, which
+        // says nothing about this one: `a = 10 // 3   // floor division`.
+        let line = line.split(" //").next().unwrap_or("").trim();
         let Some(first) = line.chars().next() else {
             return false;
         };
@@ -477,6 +538,7 @@ impl<'a> Lexer<'a> {
                     self.line_start_pos = self.pos;
                     self.space_before = true;
                 }
+                '#' if self.at_line_start && self.at_define() => self.define(),
                 '#' if self.at_length_op() => {
                     // Lua's length operator: `#t`, `t[#t + 1]`, `print(#s)`.
                     self.pos += 1;
@@ -1238,6 +1300,8 @@ mod tests {
         assert!(kinds("7 // 2").contains(&Tok::Op("//")));
         assert!(kinds("x = n // k").contains(&Tok::Op("//")));
         assert!(!kinds("x = 1 // the answer").contains(&Tok::Op("//")));
+        let both = kinds("a = 10 // 3   // floor division");
+        assert_eq!(both.iter().filter(|t| **t == Tok::Op("//")).count(), 1);
         // OCaml comments vs Haskell sections.
         assert_eq!(kinds("(* note *) 1")[0], Tok::Int(1));
         assert!(kinds("(* 3)").contains(&Tok::Op("*")));

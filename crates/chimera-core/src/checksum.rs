@@ -1,8 +1,8 @@
 //! Checksums and non-cryptographic hashes.
 //!
-//! * [`crc32`] / [`Crc32`] – CRC-32 (IEEE 802.3, the zlib/PNG polynomial).
-//!   Guards every write-ahead-log record, Raft log entry and PNG chunk.
-//! * [`adler32`] – the zlib stream checksum, needed by the PNG encoder.
+//! * [`crc32`] / [`Crc32`] – CRC-32 (IEEE 802.3, the zlib/PNG polynomial),
+//!   matching Python's `zlib.crc32`.
+//! * [`adler32`] – the zlib stream checksum.
 //! * [`fnv1a64`] – a stable 64-bit hash. Unlike `std`'s `DefaultHasher` its
 //!   output never changes between Rust releases, so it is safe to persist.
 

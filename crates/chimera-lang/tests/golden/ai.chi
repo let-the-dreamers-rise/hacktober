@@ -44,3 +44,5 @@ msg = client.messages.create(model="claude-opus-5-5", max_tokens=100, messages=[
 print(msg.content[0].text, msg.model)
 ai.backend = "offline"
 print(ai.backend)
+ai.mock("a single scripted reply")
+print(ai "anything at all")

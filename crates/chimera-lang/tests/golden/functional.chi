@@ -94,3 +94,7 @@ func swiftMain() {
 kotlinMain()
 swiftMain()
 // Haskell's `main` runs automatically at the end.
+
+val ages = mapOf("ann" to 31, "bob" to 27)
+println(ages)
+println((10 downTo 0 step 5).toList())

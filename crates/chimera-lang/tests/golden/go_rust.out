@@ -24,3 +24,5 @@ Hello, Ferris! You are 6 chars long.
 [1, 2, 3] len=3 contains 2: true
 sum=6 max=3
 42
+Ok([1, 2, 3])
+error: invalid digit found in string "five"

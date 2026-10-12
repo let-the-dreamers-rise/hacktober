@@ -697,6 +697,36 @@ pub fn install(interp: &mut Interp) {
             }
         }
     });
+    // Stable checksums over a string's UTF-8 bytes (or a list of byte values).
+    for (names, f) in [
+        (
+            &["crc32"][..],
+            (|b: &[u8]| u64::from(chimera_core::crc32(b))) as fn(&[u8]) -> u64,
+        ),
+        (&["adler32"][..], |b| u64::from(chimera_core::adler32(b))),
+        (&["fnv1a", "fnv1a64"][..], chimera_core::fnv1a64),
+    ] {
+        def(interp, names, move |interp, args| {
+            let v = arg(interp, &args, 0, names[0])?;
+            let bytes = match &v {
+                Value::Str(s) => s.as_bytes().to_vec(),
+                Value::List(items) => items
+                    .borrow()
+                    .iter()
+                    .map(|x| match x {
+                        Value::Int(n) => *n as u8,
+                        _ => 0,
+                    })
+                    .collect(),
+                other => {
+                    let t = other.type_name();
+                    return interp
+                        .type_err(format!("{}() needs a string, not {t}", names[0]), args.span);
+                }
+            };
+            Ok(Value::from_big(crate::bigint::BigInt::from_u64(f(&bytes))))
+        });
+    }
     def(
         interp,
         &["vars", "locals", "globals", "dir"],

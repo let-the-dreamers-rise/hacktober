@@ -31,6 +31,7 @@ pub fn builtin_module(interp: &mut Interp, name: &str) -> Option<Value> {
                 interp,
                 &[
                     ("sqrt", "sqrt"),
+                    ("isqrt", "isqrt"),
                     ("exp", "exp"),
                     ("log", "log"),
                     ("log2", "log2"),

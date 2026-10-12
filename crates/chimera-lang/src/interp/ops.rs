@@ -153,6 +153,14 @@ impl Interp {
                     .unwrap_or(Value::Nil);
                 self.call_value(f, Args::new(vec![v], span))
             }
+            UnOp::Try => match &v {
+                Value::Nil => Err(super::Flow::Return(Value::Nil)),
+                Value::Variant(var) if var.name().is("Err") => Err(super::Flow::Return(v.clone())),
+                Value::Variant(var) if var.name().is("Ok") || var.name().is("Some") => {
+                    Ok(var.fields.first().cloned().unwrap_or(Value::Nil))
+                }
+                _ => Ok(v),
+            },
             UnOp::Bang => match &v {
                 Value::Int(n) => {
                     if *n < 0 {

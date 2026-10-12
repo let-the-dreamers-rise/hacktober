@@ -545,7 +545,10 @@ impl<'s> Parser<'s> {
         if t.is_op("..") || t.is_op("..=") || t.is_op("...") {
             return true;
         }
-        matches!(t.ident(), Some("to" | "until" | "downto" | "through")) && self.word_op_ahead()
+        matches!(
+            t.ident(),
+            Some("to" | "until" | "downto" | "downTo" | "through")
+        ) && self.word_op_ahead()
     }
 
     fn range_rest(&mut self, lhs: Expr) -> PResult<Expr> {
@@ -556,7 +559,7 @@ impl<'s> Parser<'s> {
             Tok::Ident(w) => w != "until",
             _ => false,
         };
-        let down = t.is_word("downto");
+        let down = t.is_word("downto") || t.is_word("downTo");
         if t.is_op("..") && self.at_op("<") {
             // Swift `..<`.
             self.bump();
@@ -574,8 +577,15 @@ impl<'s> Parser<'s> {
         } else {
             None
         };
-        if down && step.is_none() {
-            step = Some(Box::new(Expr::new(ExprKind::Int(-1), t.span)));
+        if down {
+            // `10 downTo 0 step 5` counts down by 5.
+            step = Some(match step {
+                Some(s) => {
+                    let span = s.span;
+                    Box::new(Expr::new(ExprKind::Unary(UnOp::Neg, s), span))
+                }
+                None => Box::new(Expr::new(ExprKind::Int(-1), t.span)),
+            });
         }
         let span = self.span_from(lhs.span);
         Ok(Expr::new(
@@ -2451,9 +2461,10 @@ impl<'s> Parser<'s> {
                     );
                 }
                 Tok::Op("?") if !t.space_before && !starts_expr(self.nth(1)) => {
-                    // Rust `?` / Swift optional chaining marker: unwrap-or-return
-                    // is approximated as a plain value.
+                    // Rust `?`: unwrap or return the error.
                     self.bump();
+                    let span = self.span_from(start);
+                    e = Expr::new(ExprKind::Unary(UnOp::Try, Box::new(e)), span);
                 }
                 Tok::Op("{") if !self.no_brace && !t.line_start => {
                     if let Some(lit) = self.struct_literal_after(&e)? {

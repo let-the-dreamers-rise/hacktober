@@ -113,3 +113,6 @@ until count == 0
 print("count is " .. count, #"hello", 10 // 3, 2 ^ 8)
 local s2 = string.format("%s has %d letters", "chimera", string.len("chimera"))
 print(s2, string.upper("lua"), ("x"):rep(3))
+local t = {10, 20, 30}
+for i, v in ipairs(t) do io.write(i, "=", v, " ") end
+print("#t = " .. #t)

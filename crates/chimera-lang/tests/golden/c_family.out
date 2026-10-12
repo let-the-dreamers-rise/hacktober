@@ -10,6 +10,7 @@ caught: index 5 is out of range for length 2
 C# says 1 and two
 140
 interpolated 3 items, max 9
+tally=3 SQ(4)=16 flag=1
 square(7) = 49
 average = 18.00
 point (3, 4)

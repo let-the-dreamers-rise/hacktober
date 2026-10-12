@@ -1,20 +1,21 @@
 //! # chimera-core
 //!
-//! The foundation every other Chimera subsystem stands on. Nothing in here
-//! knows about languages, databases, consensus or light transport; it is the
-//! small set of primitives those systems all need and must agree on:
+//! Language-agnostic building blocks for the Chimera interpreter. Nothing in
+//! here knows about syntax or values; it is the small set of primitives the
+//! rest of the workspace leans on:
 //!
-//! * [`rng`] – a fast, seedable, *reproducible* PRNG (xoshiro256\*\*). The Raft
-//!   simulator and the path tracer both rely on bit-for-bit determinism.
-//! * [`checksum`] – CRC-32, Adler-32 and FNV-1a. Used by the write-ahead log,
-//!   the Raft log, snapshots and the PNG encoder.
+//! * [`rng`] – a fast, seedable, *reproducible* PRNG (xoshiro256\*\*). Backs
+//!   `random`, `seed` and weight initialisation, so a seeded program prints
+//!   the same numbers on every platform.
+//! * [`checksum`] – CRC-32, Adler-32 and FNV-1a. FNV-1a drives the feature
+//!   hashing of the offline text embeddings; all three are also builtins.
 //! * [`codec`] – a compact binary encoding (fixed-width big-endian integers,
-//!   LEB128 varints, length-prefixed bytes) with `Encode`/`Decode` traits.
-//! * [`diagnostic`] – source spans and rustc-style error rendering shared by
-//!   the Chimera language and the SQL front end.
-//! * [`text`] – edit distance, "did you mean" suggestions and human-readable
-//!   units.
-//! * [`table`] – box-drawn tables for the SQL shell and CLI reports.
+//!   LEB128 varints, length-prefixed bytes) with `Encode`/`Decode` traits,
+//!   groundwork for the planned bytecode cache.
+//! * [`diagnostic`] – source spans and rustc-style error rendering.
+//! * [`text`] – edit distance, "did you mean" suggestions, string escaping
+//!   and human-readable units.
+//! * [`table`] – box-drawn tables for query results and model summaries.
 //!
 //! The crate has zero dependencies and forbids `unsafe`.
 

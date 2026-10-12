@@ -1,4 +1,4 @@
-//! Box-drawn text tables for the SQL shell and CLI reports.
+//! Box-drawn text tables for query results, model summaries and CLI reports.
 //!
 //! ```
 //! use chimera_core::table::{Align, Table};

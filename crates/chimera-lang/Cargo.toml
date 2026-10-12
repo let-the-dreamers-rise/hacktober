@@ -3,6 +3,7 @@ name = "chimera-lang"
 description = "The Chimera language: a polyglot-syntax interpreter with tensors, autograd, AI and queries built in"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true

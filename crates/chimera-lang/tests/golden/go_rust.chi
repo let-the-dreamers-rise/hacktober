@@ -136,3 +136,16 @@ fn main_rs() {
 }
 
 main_rs();
+
+fn parse_all(items: Vec<&str>) -> Result<Vec<i64>, String> {
+    let mut out = Vec::new();
+    for s in items {
+        out.push(s.parse::<i64>()?);
+    }
+    Ok(out)
+}
+println!("{:?}", parse_all(vec!["1", "2", "3"]));
+match parse_all(vec!["4", "five"]) {
+    Ok(v) => println!("parsed {:?}", v),
+    Err(e) => println!("error: {}", e),
+}

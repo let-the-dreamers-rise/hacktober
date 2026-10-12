@@ -1393,9 +1393,7 @@ impl Interp {
                         && e.as_int().is_some()
                         && !matches!(s, Value::Float(f) if f.fract() != 0.0) =>
             {
-                let step = step
-                    .and_then(Value::as_int)
-                    .unwrap_or(if b < a && !inclusive && false { -1 } else { 1 });
+                let step = step.and_then(Value::as_int).unwrap_or(1);
                 if step == 0 {
                     return self.value_err("range step cannot be zero", span);
                 }
@@ -1416,6 +1414,10 @@ impl Interp {
             }
             _ => {
                 let (Some(a), Some(b)) = (s.as_f64(), e.as_f64()) else {
+                    // Kotlin's `"key" to value` builds a pair, not a range.
+                    if inclusive && step.is_none() {
+                        return Ok(Value::tuple(vec![s.clone(), e.clone()]));
+                    }
                     return self.type_err(
                         format!(
                             "cannot make a range from {} to {}",
@@ -1754,6 +1756,13 @@ impl Interp {
             Err(e) => return Err(e),
         };
         if let Some(ret) = &def.ret {
+            // `void f() { count++; }`: a void function's last expression is
+            // not its result.
+            if let TypeExpr::Named(n, _) = ret
+                && TypeTag::from_name(&n.as_str()) == Some(TypeTag::Nil)
+            {
+                return Ok(Value::Nil);
+            }
             return self
                 .coerce_declared(value, ret, def.span)
                 .map_err(|e| match e {

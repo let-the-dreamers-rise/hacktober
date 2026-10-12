@@ -833,7 +833,7 @@ impl Emitter<'_> {
                     _ => (format!("type({v})"), prec::POSTFIX),
                 }
             }
-            UnOp::Bang => self.expr(x),
+            UnOp::Bang | UnOp::Try => self.expr(x),
         }
     }
 

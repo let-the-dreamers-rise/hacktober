@@ -3,9 +3,8 @@
 //! [`Rng`] is xoshiro256\*\* seeded through SplitMix64. It is *not*
 //! cryptographically secure; it is fast, statistically solid and, most
 //! importantly, reproducible: the same seed yields the same stream on every
-//! platform. The Raft simulator replays failures from a single `u64` seed and
-//! the renderer derives one independent stream per pixel, so images are
-//! identical no matter how many threads render them.
+//! platform, so a Chimera program that calls `seed(7)` trains the same
+//! network and draws the same samples everywhere.
 
 /// Advances a SplitMix64 state and returns the next output.
 pub fn splitmix64(state: &mut u64) -> u64 {

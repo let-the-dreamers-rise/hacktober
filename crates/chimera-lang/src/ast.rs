@@ -424,6 +424,9 @@ pub enum UnOp {
     TypeOf,
     /// Postfix `x!` (factorial for integers, force-unwrap otherwise).
     Bang,
+    /// Postfix `x?` (Rust): unwraps `Ok`/`Some`, returns `Err`/`None` from
+    /// the enclosing function.
+    Try,
 }
 
 /// Binary operators.

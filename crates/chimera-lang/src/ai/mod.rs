@@ -343,14 +343,19 @@ impl Object for AiObject {
                 Ok(Value::Nil)
             }
             "mock" => {
+                // `ai.mock("one")`, `ai.mock("a", "b")` or `ai.mock(["a", "b"])`.
                 let span = args.span;
-                let replies = match args.get(0) {
-                    Some(v) => match interp.collect(&v.clone(), span) {
-                        Ok(items) => items,
+                let mut replies = Vec::new();
+                for v in &args.pos {
+                    if matches!(v, Value::Str(_)) {
+                        replies.push(v.clone());
+                        continue;
+                    }
+                    match interp.collect(v, span) {
+                        Ok(items) => replies.extend(items),
                         Err(e) => return Some(Err(e)),
-                    },
-                    None => Vec::new(),
-                };
+                    }
+                }
                 let mut texts = Vec::with_capacity(replies.len());
                 for r in &replies {
                     match interp.to_str(r) {

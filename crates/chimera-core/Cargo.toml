@@ -3,6 +3,7 @@ name = "chimera-core"
 description = "Shared foundations for Chimera: deterministic RNG, checksums, binary codec, diagnostics"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true

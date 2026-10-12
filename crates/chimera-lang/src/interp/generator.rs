@@ -311,6 +311,9 @@ pub struct Generator {
     name: Rc<str>,
     def: Rc<FnDef>,
     receiver: Option<Value>,
+    /// Where the generator was created, for tracebacks raised while it is
+    /// resumed from somewhere without a span of its own (`list(gen)`).
+    origin: (FileId, Span),
     state: RefCell<State>,
 }
 
@@ -331,7 +334,6 @@ impl Generator {
                 interp.cur_file = def.file;
                 let e = interp.error("SyntaxError", msg, at);
                 interp.cur_file = saved;
-                let _ = span;
                 return Err(e);
             }
         };
@@ -339,6 +341,7 @@ impl Generator {
             name,
             def: def.clone(),
             receiver,
+            origin: (interp.cur_file, span),
             state: RefCell::new(State {
                 env,
                 frames: vec![Frame::Block {
@@ -374,9 +377,14 @@ impl Generator {
             }
         }
         self.state.borrow_mut().running = true;
+        let (file, span) = if span.is_empty() {
+            self.origin
+        } else {
+            (interp.cur_file, span)
+        };
         interp.frames.push(CallFrame {
             name: self.name.clone(),
-            file: interp.cur_file,
+            file,
             span,
             class: None,
             receiver: self.receiver.clone(),

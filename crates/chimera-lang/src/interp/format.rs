@@ -92,11 +92,13 @@ pub fn display_plain(v: &Value, nested: bool) -> String {
                 format!("{{{}}}", items.join(", "))
             }
         }
+        // `..` means different things in different dialects, so ranges
+        // print in Python's unambiguous half-open form.
         Value::Range(r) => {
             if r.step == 1 {
-                format!("{}..{}", r.start, r.end)
+                format!("range({}, {})", r.start, r.end)
             } else {
-                format!("{}..{} by {}", r.start, r.end, r.step)
+                format!("range({}, {}, {})", r.start, r.end, r.step)
             }
         }
         Value::Func(c) => format!("<fn {}>", c.name()),
@@ -639,6 +641,7 @@ impl Interp {
                 'd' | 'i' | 'u' => {
                     let v = match &arg {
                         Value::Float(f) => Value::Int(f.trunc() as i64),
+                        Value::Bool(b) => Value::Int(i64::from(*b)),
                         other => other.clone(),
                     };
                     self.format_spec(&v, &format!("{spec}d"), span)?

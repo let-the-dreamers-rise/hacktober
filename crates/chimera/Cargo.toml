@@ -3,6 +3,7 @@ name = "chimera"
 description = "Chimera: the shapeshifting programming language - any syntax, built-in machine learning, AI and queries"
 version.workspace = true
 edition.workspace = true
+rust-version.workspace = true
 license.workspace = true
 repository.workspace = true
 authors.workspace = true

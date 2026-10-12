@@ -385,6 +385,21 @@ pub fn install(interp: &mut Interp) {
         }
         Ok(Value::Float(acc.sqrt()))
     });
+    def(interp, &["isqrt"], |interp, args| {
+        let n = int_arg(interp, &args, 0, "isqrt")?;
+        if n < 0 {
+            return interp.value_err("isqrt() argument must be nonnegative", args.span);
+        }
+        // Start from the float estimate and correct its rounding error.
+        let mut r = (n as f64).sqrt() as i64;
+        while r > 0 && r.checked_mul(r).is_none_or(|sq| sq > n) {
+            r -= 1;
+        }
+        while (r + 1).checked_mul(r + 1).is_some_and(|sq| sq <= n) {
+            r += 1;
+        }
+        Ok(Value::Int(r))
+    });
     def(interp, &["gcd"], |interp, args| {
         let mut g = 0;
         for (i, _) in args.pos.iter().enumerate() {

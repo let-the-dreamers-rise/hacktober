@@ -1,6 +1,8 @@
 // C, C++, Java and C# side by side
 #include <stdio.h>
 #include <iostream>
+#define LIMIT 3
+#define SQ(x) ((x) * (x))
 using namespace std;
 
 int square(int x) {
@@ -97,4 +99,13 @@ Console.WriteLine("C# says {0} and {1}", 1, "two");
 var nums = new List<int> { 5, 3, 9 };
 Console.WriteLine(nums.Where(n => n > 4).Select(n => n * 10).Sum());
 Console.WriteLine($"interpolated {nums.Count} items, max {nums.Max()}");
+
+class Tally {
+    private int count = 0;
+    public void bump() { count++; }
+    public int get() { return count; }
+}
+Tally tally = new Tally();
+for (int i = 0; i < LIMIT; i++) tally.bump();
+printf("tally=%d SQ(4)=%d flag=%d\n", tally.get(), SQ(4), 1 > 0);
 main();
