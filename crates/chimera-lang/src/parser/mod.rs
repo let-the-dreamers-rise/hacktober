@@ -149,6 +149,13 @@ pub(crate) struct Parser<'s> {
     pub(crate) no_juxtapose: bool,
     /// `|` is not bitwise-or here (Haskell guards).
     pub(crate) no_bitor: bool,
+    /// Inside `[…]` indexing: `a:b` is a slice, not a Lua method call.
+    pub(crate) in_index: bool,
+    /// Inside Rust code (`fn` bodies, `for x in a..b {`): `a..b` excludes
+    /// `b`. Elsewhere `..` includes it (Ruby, Kotlin, Haskell, Perl).
+    pub(crate) rust_ranges: bool,
+    /// Inside a Kotlin `fun`: `print` doesn't add a newline (`println` does).
+    pub(crate) kotlin_fun: bool,
     /// Offsets of parsed `yield`s not yet claimed by a function.
     pub(crate) yields: std::cell::RefCell<Vec<usize>>,
     depth: usize,
@@ -170,6 +177,9 @@ impl<'s> Parser<'s> {
             no_juxtapose: false,
             no_bitor: false,
             yields: std::cell::RefCell::new(Vec::new()),
+            in_index: false,
+            rust_ranges: false,
+            kotlin_fun: false,
             depth: 0,
         }
     }
@@ -547,7 +557,10 @@ impl<'s> Parser<'s> {
             if self.at_eof() {
                 break;
             }
-            if self.at_terminator(terms::BASE | terms::CASE | terms::WHEN | terms::UNTIL) {
+            // `case`, `when` and `until` start statements at the top level
+            // (Ruby `case x`, Kotlin `when`, Ruby `until`), so only `end`/
+            // `else`-like words are stray here.
+            if self.at_terminator(terms::BASE) {
                 let t = self.bump();
                 self.error(t.span, format!("unexpected {}", describe(&t)));
                 continue;
@@ -930,6 +943,7 @@ pub(crate) fn simple_param(name: Sym) -> Param {
         default: None,
         ty: None,
         kind: ParamKind::Normal,
+        label: None,
     }
 }
 

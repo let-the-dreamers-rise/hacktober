@@ -1023,6 +1023,23 @@ impl Interp {
 
     /// `obj[index]`, including slices and multi-dimensional tensor indexing.
     pub fn eval_index(&mut self, obj: &Value, index: &Expr, env: &Rc<Env>, span: Span) -> R {
+        // Ruby `h[:name]` parses like Python's `xs[:n]`; on a map it is a
+        // symbol key.
+        if let (
+            Value::Map(m),
+            ExprKind::Slice {
+                start: None,
+                end: Some(end),
+                step: None,
+            },
+        ) = (obj, &index.kind)
+            && let ExprKind::Name(n) = &end.kind
+        {
+            return Ok(m
+                .borrow()
+                .get(&Value::Str(n.as_str()))
+                .unwrap_or(Value::Nil));
+        }
         if let ExprKind::Slice { start, end, step } = &index.kind {
             let (s, e, st) =
                 self.slice_bounds(start.as_deref(), end.as_deref(), step.as_deref(), env)?;

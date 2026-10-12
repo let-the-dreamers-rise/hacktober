@@ -52,6 +52,8 @@ impl Interp {
                 let lit = self.eval(e, env)?;
                 self.values_equal(&lit, value)
             }
+            // OCaml/Haskell unit: `let () = print_endline "x"`.
+            Pattern::Tuple(items) if items.is_empty() && matches!(value, Value::Nil) => Ok(true),
             Pattern::Tuple(items) => {
                 let elems: Vec<Value> = match value {
                     Value::Tuple(t) => t.to_vec(),

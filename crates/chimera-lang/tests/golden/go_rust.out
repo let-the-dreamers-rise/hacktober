@@ -1,0 +1,26 @@
+area: 13.5
+17 = 5*3 + 2
+15
+go-is-fun 3
+found b = 2
+[0, 1, 4, 9, 16] SHOUT true
+deferred 2
+deferred 1
+deferred 0
+Circle(1.0) has area 3.14
+Rect { w: 2.0, h: 3.0 } has area 6.00
+Unit has area 0.00
+-5 is negative
+0 is zero
+7 is small
+42 is large
+total = 44
+[4, 16, 36, 64, 100]
+first even: 8
+none found
+Ok(42) Err("not a number: 4x2")
+doubled = 42
+Hello, Ferris! You are 6 chars long.
+[1, 2, 3] len=3 contains 2: true
+sum=6 max=3
+42

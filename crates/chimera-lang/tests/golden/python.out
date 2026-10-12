@@ -1,0 +1,26 @@
+Hello, Ada!
+Hi, Grace!
+[0, 4, 16, 36, 64]
+{"a": 1, "b": 2, "c": 3}
+{0, 1, 2}
+Cat says meow
+REX SAYS WOOF
+[Animal("Cat"), Animal("Rex")] 2
+10 2.5
+["quick", "brown", "jumps"] ["dog", "lazy"]
+The Quick Brown
+the 2
+caught: division by zero
+finally ran
+[0, 1, 1, 2, 3, 5, 8, 13, 21, 34]
+11 3 ["cba", "zyx"]
+3.142 1.4142 ff 1,234,567    pad|
+{"a": [1, 2, null], "b": true}
+1.5 [true, nil]
+1 [2, 3, 4]
+true str 1
+true true (3, 2) 3 2.67
+big
+[2, 3]
+[1, 2, 3, 4] [(1, 3), (2, 4)]
+["line one", "line two"]

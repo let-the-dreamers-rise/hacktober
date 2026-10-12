@@ -202,12 +202,35 @@ impl Interp {
         if matches!(a, Value::Tensor(_)) || matches!(b, Value::Tensor(_)) || op == BinOp::MatMul {
             return self.tensor_binary(op, &a, &b, span);
         }
-        if let (Some(x), Some(y)) = (num(&a), num(&b))
-            && !matches!(op, BinOp::Concat | BinOp::Shl if matches!(a, Value::Bool(_)))
+        if let (Value::Bool(p), Value::Bool(q)) = (&a, &b)
+            && matches!(op, BinOp::BitAnd | BinOp::BitOr | BinOp::BitXor)
+        {
+            // `true & false`, `a ^ b` on booleans stay boolean.
+            return Ok(Value::Bool(match op {
+                BinOp::BitAnd => *p & *q,
+                BinOp::BitOr => *p | *q,
+                _ => *p ^ *q,
+            }));
+        }
+        if op != BinOp::Concat
+            && let (Some(x), Some(y)) = (num(&a), num(&b))
         {
             return self.numeric(op, x, y, span);
         }
         match (op, &a, &b) {
+            // Lua `..` on numbers: `1 .. 2` is "12".
+            (BinOp::Concat, x, y)
+                if !matches!(
+                    x,
+                    Value::List(_) | Value::Tuple(_) | Value::Str(_) | Value::Instance(_)
+                ) && !matches!(
+                    y,
+                    Value::List(_) | Value::Tuple(_) | Value::Str(_) | Value::Instance(_)
+                ) =>
+            {
+                let (x, y) = (self.to_str(x)?, self.to_str(y)?);
+                Ok(Value::str(&format!("{x}{y}")))
+            }
             (BinOp::Add | BinOp::Concat, Value::Str(x), Value::Str(y)) => {
                 let mut s = String::with_capacity(x.len() + y.len());
                 s.push_str(x);

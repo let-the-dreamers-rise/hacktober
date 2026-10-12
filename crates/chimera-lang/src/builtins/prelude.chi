@@ -101,3 +101,23 @@ class StringBuilder {
     toString() { return this.text }
     ToString() { return this.text }
 }
+
+// Kotlin collection builders.
+def listOf(*xs) = list(xs)
+def mutableListOf(*xs) = list(xs)
+def arrayListOf(*xs) = list(xs)
+def arrayOf(*xs) = list(xs)
+def intArrayOf(*xs) = list(xs)
+def emptyList() = []
+def setOf(*xs) = set(xs)
+def mutableSetOf(*xs) = set(xs)
+def hashSetOf(*xs) = set(xs)
+def mapOf(*pairs) = dict(pairs)
+def mutableMapOf(*pairs) = dict(pairs)
+def hashMapOf(*pairs) = dict(pairs)
+def emptyMap() = {}
+def Pair(a, b) = (a, b)
+def Triple(a, b, c) = (a, b, c)
+def repeat_n(n, f) {
+    for i in range(n) { f(i) }
+}

@@ -628,6 +628,13 @@ impl Parser<'_> {
             return Ok(TypeExpr::Any);
         }
         let (mut name, _) = self.expect_ident("for the type")?;
+        // Kotlin/Swift nullable types lexed with the `?` attached: `String?`.
+        if let Some(base) = name.as_str().strip_suffix('?') {
+            return Ok(TypeExpr::Optional(Box::new(TypeExpr::Named(
+                Sym::new(base),
+                Vec::new(),
+            ))));
+        }
         while (self.at_op(".") || self.at_op("::"))
             && self.nth(1).ident().is_some()
             && !self.nth(1).space_before

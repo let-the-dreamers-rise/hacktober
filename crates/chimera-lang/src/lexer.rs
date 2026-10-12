@@ -120,12 +120,17 @@ impl Token {
     }
 }
 
+/// Format-spec marker for a `$name` interpolation that falls back to the
+/// literal text when the name is undefined.
+pub const SOFT_INTERPOLATION: &str = "\u{1}soft";
+
 /// Operators, longest first so that maximal munch works by linear scan.
 const OPERATORS: &[&str] = &[
     "...", "..=", "===", "!==", "<=>", "**=", "<<=", ">>=", "&&=", "||=", "??=", "..", "::", ":=",
-    "=>", "==", "!=", "->", "<-", "<=", ">=", "<<", ">>", "+=", "-=", "*=", "/=", "%=", "^=", "&=",
-    "|=", "++", "--", "**", "&&", "||", "|>", "?.", "??", "?:", ".", ":", "=", "<", ">", "+", "-",
-    "*", "/", "%", "^", "&", "|", "!", "?", "~", "@", ",", ";", "(", ")", "[", "]", "{", "}", "\\",
+    "//=", "=>", "==", "!=", "->", "<-", "<=", ">=", "<<", ">>", "+=", "-=", "*=", "/=", "%=",
+    "^=", "&=", "//", "|=", "++", "--", "**", "&&", "||", "|>", "?.", "??", "?:", ".", ":", "=",
+    "<", ">", "+", "-", "*", "/", "%", "^", "&", "|", "!", "?", "~", "@", ",", ";", "(", ")", "[",
+    "]", "{", "}", "\\",
 ];
 
 /// Lexes a whole source file.
@@ -195,7 +200,14 @@ impl<'a> Lexer<'a> {
     }
 
     fn column_of(&self, offset: usize) -> usize {
-        self.src[self.line_start_pos..offset]
+        // A token that started on an earlier line (a multi-line string)
+        // measures from its own line's start.
+        let line_start = if offset < self.line_start_pos {
+            self.src[..offset].rfind('\n').map_or(0, |i| i + 1)
+        } else {
+            self.line_start_pos
+        };
+        self.src[line_start..offset]
             .chars()
             .map(|c| if c == '\t' { 4 } else { 1 })
             .sum()
@@ -225,6 +237,141 @@ impl<'a> Lexer<'a> {
             Some(Tok::Ident(w)) if w == "break" || w == "continue" => true,
             _ => self.at_line_start && after == Some(':'),
         }
+    }
+
+    /// `(* comment *)` (OCaml, Pascal), as opposed to the Haskell section
+    /// `(* 3)`: the comment closes with `*)` before any other `)`.
+    fn at_ocaml_comment(&self) -> bool {
+        let rest = self.rest();
+        if !rest.starts_with("(*") || rest.starts_with("(*)") {
+            return false;
+        }
+        let body = &rest[2..];
+        match (body.find("*)"), body.find(')')) {
+            (Some(close), Some(paren)) => close + 1 == paren,
+            _ => false,
+        }
+    }
+
+    fn skip_ocaml_comment(&mut self) {
+        let rest = self.rest();
+        let len = rest[2..].find("*)").map_or(rest.len(), |i| i + 4);
+        let text = &rest[..len];
+        self.line += text.matches('\n').count();
+        if let Some(nl) = text.rfind('\n') {
+            self.line_start_pos = self.pos + nl + 1;
+        }
+        self.pos += len;
+        self.space_before = true;
+    }
+
+    /// Ruby's `%w[a b c]` / `%i(a b)` word arrays (not after an operand,
+    /// where `%` is modulo).
+    fn at_word_array(&self) -> bool {
+        let operand_before = self.tokens.last().is_some_and(|t| {
+            t.line == self.line
+                && (matches!(t.tok, Tok::Int(_) | Tok::Float(_) | Tok::BigInt(_) | Tok::Str(_))
+                    || matches!(&t.tok, Tok::Ident(w) if w != "puts" && w != "p" && w != "print" && w != "return")
+                    || matches!(t.tok, Tok::Op(")" | "]" | "}")))
+        });
+        !operand_before
+            && matches!(self.peek_at(1), Some('w' | 'i' | 'W' | 'I'))
+            && matches!(self.peek_at(2), Some('[' | '(' | '{' | '<'))
+    }
+
+    fn word_array(&mut self, start: usize) {
+        let open = self.peek_at(2).unwrap_or('[');
+        let close = match open {
+            '(' => ')',
+            '{' => '}',
+            '<' => '>',
+            _ => ']',
+        };
+        self.pos += 3;
+        let body_start = self.pos;
+        let body_end = self.src[body_start..self.end]
+            .find(close)
+            .map_or(self.end, |i| body_start + i);
+        let body = &self.src[body_start..body_end];
+        self.line += body.matches('\n').count();
+        self.push(Tok::Op("["), start);
+        for (i, w) in body.split_whitespace().enumerate() {
+            if i > 0 {
+                self.push(Tok::Op(","), start);
+            }
+            self.push(
+                Tok::Str(StrLit {
+                    parts: vec![StrPart::Text(w.to_owned())],
+                }),
+                start,
+            );
+        }
+        self.pos = (body_end + 1).min(self.end);
+        self.push(Tok::Op("]"), start);
+        self.space_before = false;
+    }
+
+    /// Whether `#` is Lua's length operator rather than a comment: it is
+    /// glued to an operand and follows an operator, `(`/`[`/`,`/`=` or
+    /// `return`.
+    fn at_length_op(&self) -> bool {
+        let next = self.peek_at(1);
+        if !next.is_some_and(|c| is_ident_start(c) || matches!(c, '(' | '{' | '"' | '\'')) {
+            return false;
+        }
+        match self.tokens.last() {
+            Some(t) if t.line == self.line => match &t.tok {
+                Tok::Op(op) => !matches!(*op, ")" | "]" | "}"),
+                Tok::Ident(w) => matches!(
+                    w.as_str(),
+                    "return" | "and" | "or" | "not" | "then" | "do" | "in" | "print"
+                ),
+                _ => false,
+            },
+            _ => false,
+        }
+    }
+
+    /// Whether `//` is floor division (Python, Lua) rather than a comment:
+    /// it follows an operand on the same line and what comes after reads
+    /// like an expression (`7 // 2`, `n // 10)`), not prose
+    /// (`x = 1 // the answer`).
+    fn at_floor_div(&self) -> bool {
+        let operand_before = self.tokens.last().is_some_and(|t| {
+            t.line == self.line
+                && match &t.tok {
+                    Tok::Int(_) | Tok::Float(_) | Tok::BigInt(_) => true,
+                    Tok::Op(op) => matches!(*op, ")" | "]"),
+                    Tok::Ident(w) => !matches!(w.as_str(), "return" | "else" | "then" | "do"),
+                    _ => false,
+                }
+        });
+        if !operand_before {
+            return false;
+        }
+        let rest = &self.src[self.pos + 2..self.end];
+        let line = rest.split('\n').next().unwrap_or("").trim();
+        let Some(first) = line.chars().next() else {
+            return false;
+        };
+        if !(first.is_ascii_digit() || is_ident_start(first) || first == '(' || first == '-') {
+            return false;
+        }
+        if line.contains([':', '!', '?', '\'', '"']) && !line.contains('#') {
+            return false;
+        }
+        // Prose has consecutive words: `// set x to 5`.
+        let words: Vec<&str> = line
+            .split('#')
+            .next()
+            .unwrap_or("")
+            .split_whitespace()
+            .collect();
+        let wordy = |w: &str| {
+            w.chars().next().is_some_and(char::is_alphabetic)
+                && w.chars().all(|c| c.is_alphanumeric() || c == '_')
+        };
+        !words.windows(2).any(|p| wordy(p[0]) && wordy(p[1]))
     }
 
     fn push(&mut self, tok: Tok, start: usize) {
@@ -303,11 +450,20 @@ impl<'a> Lexer<'a> {
                     self.line_start_pos = self.pos;
                     self.space_before = true;
                 }
+                '#' if self.at_length_op() => {
+                    // Lua's length operator: `#t`, `t[#t + 1]`, `print(#s)`.
+                    self.pos += 1;
+                    self.push(Tok::Op("#"), start);
+                }
                 '#' => self.skip_line_comment(),
-                '/' if self.rest().starts_with("//") => self.skip_line_comment(),
+                '/' if self.rest().starts_with("//") && !self.at_floor_div() => {
+                    self.skip_line_comment()
+                }
+                '(' if self.at_ocaml_comment() => self.skip_ocaml_comment(),
                 '/' if self.rest().starts_with("/*") => self.skip_block_comment(),
                 '-' if self.is_dash_comment() => self.skip_line_comment(),
                 '0'..='9' => self.number(),
+                '%' if self.at_word_array() => self.word_array(start),
                 '\'' if self.at_lifetime() => {
                     // Rust lifetimes and loop labels (`&'a str`, `<'a>`,
                     // `'outer: loop`) carry no runtime meaning.
@@ -437,6 +593,16 @@ impl<'a> Lexer<'a> {
             name.push('\'');
         }
         // Rust macros (`println!(…)`, `vec![…]`) and Ruby bang/predicate methods.
+        // A trailing `?`/`!` belongs to a Ruby method name after `def`, `.`
+        // or a symbol colon (`def empty?`, `xs.empty?`, `&:even?`).
+        let method_context = match self.tokens.last().map(|t| &t.tok) {
+            Some(Tok::Op("." | "&." | ":" | "&:")) => true,
+            Some(Tok::Ident(w)) => w == "def",
+            _ => false,
+        };
+        let ends_name = |c: Option<char>| {
+            c.is_none_or(|c| c.is_whitespace() || matches!(c, ')' | ',' | ']' | '}' | ';'))
+        };
         match (self.peek(), self.peek_at(1)) {
             (Some('!'), Some('(' | '[')) => {
                 self.pos += 1;
@@ -445,6 +611,10 @@ impl<'a> Lexer<'a> {
             (Some('?'), Some('(')) => {
                 self.pos += 1;
                 name.push('?');
+            }
+            (Some(c @ ('?' | '!')), next) if method_context && ends_name(next) => {
+                self.pos += 1;
+                name.push(c);
             }
             _ => {}
         }
@@ -471,6 +641,11 @@ impl<'a> Lexer<'a> {
                 self.pos += 1;
                 let digits = self.ident_text();
                 self.push(Tok::Ident(format!("${digits}")), start);
+            }
+            Some(c) if c.is_whitespace() || c == '(' => {
+                // Haskell application: `print $ sum xs`.
+                self.pos += 1;
+                self.push(Tok::Op("$"), start);
             }
             _ => {
                 self.pos += 1;
@@ -738,6 +913,27 @@ impl<'a> Lexer<'a> {
                 self.interpolation(&mut text, &mut parts, 2, false);
                 continue;
             }
+            if dollar && quote == '"' && c == '$' && self.peek_at(1).is_some_and(is_ident_start) {
+                // Kotlin/Groovy/PHP/shell `"$name"`. Soft: a name that isn't
+                // defined stays literal text, so "$HOME" in other languages
+                // is safe.
+                let name_start = self.pos + 1;
+                let len: usize = self.src[name_start..self.end]
+                    .chars()
+                    .take_while(|&c| is_ident_continue(c))
+                    .map(char::len_utf8)
+                    .sum();
+                if !text.is_empty() {
+                    parts.push(StrPart::Text(std::mem::take(&mut text)));
+                }
+                parts.push(StrPart::Code {
+                    offset: name_start,
+                    len,
+                    spec: Some(SOFT_INTERPOLATION.to_owned()),
+                });
+                self.pos = name_start + len;
+                continue;
+            }
             if c == '\n' {
                 text.push('\n');
                 self.pos += 1;
@@ -996,7 +1192,7 @@ mod tests {
 
     #[test]
     fn comments_of_every_flavour() {
-        let src = "a // c\nb # py\n/* block /* nested */ */ c\n-- lua\nd";
+        let src = "a // a comment\nb # py\n/* block /* nested */ */ c\n-- lua\nd";
         let words: Vec<Tok> = kinds(src)
             .into_iter()
             .filter(|t| matches!(t, Tok::Ident(_)))
@@ -1004,6 +1200,13 @@ mod tests {
         assert_eq!(words, vec![ident("a"), ident("b"), ident("c"), ident("d")]);
         // `x--` is a decrement, not a comment.
         assert!(kinds("x--").contains(&Tok::Op("--")));
+        // `//` after an operand and before an expression is floor division.
+        assert!(kinds("7 // 2").contains(&Tok::Op("//")));
+        assert!(kinds("x = n // k").contains(&Tok::Op("//")));
+        assert!(!kinds("x = 1 // the answer").contains(&Tok::Op("//")));
+        // OCaml comments vs Haskell sections.
+        assert_eq!(kinds("(* note *) 1")[0], Tok::Int(1));
+        assert!(kinds("(* 3)").contains(&Tok::Op("*")));
     }
 
     #[test]

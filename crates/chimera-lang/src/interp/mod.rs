@@ -344,6 +344,9 @@ pub struct Interp {
     /// Environment of the innermost native call site (for `eval`, `please`).
     pub(crate) call_env: Option<Rc<Env>>,
     pub(crate) training: bool,
+    /// Whether a function named `main` has been called (for auto-running
+    /// `main` in Go, Rust, C, Java, Kotlin and Haskell programs).
+    pub main_called: bool,
 }
 
 impl std::fmt::Debug for Interp {
@@ -382,6 +385,7 @@ impl Interp {
             aggregates: Vec::new(),
             call_env: None,
             training: false,
+            main_called: false,
         };
         crate::builtins::install(&mut interp);
         interp
@@ -847,6 +851,8 @@ impl Interp {
                 Value::Func(c) => c.required_params() == 0,
                 _ => false,
             },
+            // A bare `puts` / `print` / `println` statement prints a newline.
+            Value::Native(n) => matches!(&*n.name, "puts" | "println" | "print"),
             _ => false,
         }
     }
@@ -1009,6 +1015,24 @@ impl Interp {
                 for part in parts {
                     match part {
                         InterpPart::Lit(s) => out.push_str(s),
+                        InterpPart::Expr(expr, Some(spec))
+                            if &**spec == crate::lexer::SOFT_INTERPOLATION =>
+                        {
+                            match &expr.kind {
+                                ExprKind::Name(n)
+                                    if env.get(*n).is_none()
+                                        && self.implicit_member(*n).is_none()
+                                        && !self.builtins.contains_key(n) =>
+                                {
+                                    out.push('$');
+                                    out.push_str(&n.as_str());
+                                }
+                                _ => {
+                                    let v = self.eval(expr, env)?;
+                                    out.push_str(&self.to_str(&v)?);
+                                }
+                            }
+                        }
                         InterpPart::Expr(expr, spec) => {
                             let v = self.eval(expr, env)?;
                             let s = match spec {
@@ -1591,11 +1615,83 @@ impl Interp {
                 let t = Value::Tensor(t);
                 self.call_method(&t, sym("__call__"), args, span)
             }
+            Value::Str(s) => self.call_symbol(&s, args),
             other => {
                 let t = other.type_name();
                 self.type_err(format!("`{t}` value is not callable"), span)
             }
         }
+    }
+
+    /// Ruby's symbol-to-proc: `xs.map(&:upcase)`, `xs.reduce(:+)`. An
+    /// operator symbol applies the operator; a name calls that method on
+    /// the first argument.
+    fn call_symbol(&mut self, s: &str, mut args: Args) -> R {
+        let span = args.span;
+        let op = match s {
+            "+" => Some(BinOp::Add),
+            "-" => Some(BinOp::Sub),
+            "*" => Some(BinOp::Mul),
+            "/" => Some(BinOp::Div),
+            "%" => Some(BinOp::Mod),
+            "**" => Some(BinOp::Pow),
+            "&" => Some(BinOp::BitAnd),
+            "|" => Some(BinOp::BitOr),
+            "^" => Some(BinOp::BitXor),
+            "<<" => Some(BinOp::Shl),
+            ">>" => Some(BinOp::Shr),
+            _ => None,
+        };
+        if let Some(op) = op
+            && args.pos.len() == 2
+        {
+            let b = args.pos.pop().unwrap_or(Value::Nil);
+            let a = args.pos.pop().unwrap_or(Value::Nil);
+            return self.binary_op(op, a, b, span);
+        }
+        if args.pos.len() == 2 {
+            let b = args.pos.pop().unwrap_or(Value::Nil);
+            let a = args.pos.pop().unwrap_or(Value::Nil);
+            let cmp = match s {
+                "<" => Some(CmpOp::Lt),
+                ">" => Some(CmpOp::Gt),
+                "<=" => Some(CmpOp::Le),
+                ">=" => Some(CmpOp::Ge),
+                "==" => Some(CmpOp::Eq),
+                "!=" | "/=" => Some(CmpOp::Ne),
+                _ => None,
+            };
+            if let Some(c) = cmp {
+                return self.compare_op(c, &a, &b, span);
+            }
+            match s {
+                "++" | "<>" => return self.binary_op(BinOp::Concat, a, b, span),
+                "&&" => return Ok(if a.truthy() { b } else { a }),
+                "||" => return Ok(if a.truthy() { a } else { b }),
+                "!!" => return self.index_value(&a, &b, span),
+                "." => {
+                    // Composition: `(f . g) x == f (g x)`.
+                    return Ok(Value::native("composed", move |interp, args| {
+                        let inner = interp.call_value(b.clone(), args)?;
+                        interp.call_value(a.clone(), Args::new(vec![inner], Span::default()))
+                    }));
+                }
+                _ => {}
+            }
+            args.pos.push(a);
+            args.pos.push(b);
+        }
+        if args.pos.is_empty() {
+            return self.type_err(
+                format!(
+                    "the string {} is not callable",
+                    format::repr_plain(&Value::str(s))
+                ),
+                span,
+            );
+        }
+        let recv = args.pos.remove(0);
+        self.call_method(&recv, sym(s), args, span)
     }
 
     /// Calls a user function, binding parameters.
@@ -1623,6 +1719,9 @@ impl Interp {
             ));
         }
         let def = &c.def;
+        if def.name.is_some_and(|n| n.is("main")) {
+            self.main_called = true;
+        }
         let env = Env::child(&c.env, EnvKind::Function);
         let class = c.class.borrow().as_ref().and_then(std::rc::Weak::upgrade);
         if let Some(recv) = &receiver {
@@ -1695,7 +1794,7 @@ impl Interp {
                     let named_val = name.and_then(|n| {
                         named
                             .iter()
-                            .position(|(k, _)| *k == n)
+                            .position(|(k, _)| *k == n || Some(*k) == p.label)
                             .map(|i| named.remove(i).1)
                     });
                     let v = match (named_val, pos.next()) {
@@ -1779,7 +1878,23 @@ impl Interp {
             }
             ExprKind::Index { object, index } => {
                 let obj = self.eval(object, env)?;
-                let idx = self.eval(index, env)?;
+                let idx = match (&obj, &index.kind) {
+                    // Ruby `h[:key] = v`.
+                    (
+                        Value::Map(_),
+                        ExprKind::Slice {
+                            start: None,
+                            end: Some(end),
+                            step: None,
+                        },
+                    ) if matches!(end.kind, ExprKind::Name(_)) => {
+                        let ExprKind::Name(n) = &end.kind else {
+                            unreachable!()
+                        };
+                        Value::Str(n.as_str())
+                    }
+                    _ => self.eval(index, env)?,
+                };
                 self.set_index(&obj, idx, value, target.span)
             }
             ExprKind::Tuple(items) | ExprKind::List(items) => {

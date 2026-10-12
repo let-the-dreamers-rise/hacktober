@@ -279,6 +279,7 @@ impl<'s> Parser<'s> {
             "*=" => Some(BinOp::Mul),
             "/=" => Some(BinOp::Div),
             "%=" => Some(BinOp::Mod),
+            "//=" => Some(BinOp::FloorDiv),
             "**=" | "^=" => Some(BinOp::Pow),
             "&=" => Some(BinOp::BitAnd),
             "|=" => Some(BinOp::BitOr),
@@ -320,6 +321,31 @@ impl<'s> Parser<'s> {
             let word = word.as_deref();
             let start = lhs.span;
 
+            // Haskell `f $ x`: lowest-precedence, right-associative application.
+            if t.is_op("$") && min <= bp::PIPE {
+                self.bump();
+                self.skip_newlines();
+                let arg = self.expr_bp(bp::PIPE)?;
+                let span = start.to(arg.span);
+                lhs = match lhs.kind {
+                    // A partial application `filter even $ xs` supplies the
+                    // last argument: `filter(even, xs)`.
+                    ExprKind::Call { callee, mut args }
+                        if matches!(callee.kind, ExprKind::Name(_) | ExprKind::Member { .. }) =>
+                    {
+                        args.push(Arg::Pos(arg));
+                        Expr::new(ExprKind::Call { callee, args }, span)
+                    }
+                    kind => Expr::new(
+                        ExprKind::Call {
+                            callee: Box::new(Expr::new(kind, lhs.span)),
+                            args: vec![Arg::Pos(arg)],
+                        },
+                        span,
+                    ),
+                };
+                continue;
+            }
             // `|>`
             if t.is_op("|>") && min <= bp::PIPE {
                 self.bump();
@@ -422,6 +448,22 @@ impl<'s> Parser<'s> {
                 lhs = Expr::new(ExprKind::Binary(op, Box::new(lhs), Box::new(rhs)), span);
                 continue;
             }
+            // Lua concatenation is written with spaces: `name .. "!"`.
+            if min <= bp::RANGE
+                && t.is_op("..")
+                && t.space_before
+                && self.nth(1).space_before
+                && !self.nth_is_op(1, "<")
+            {
+                self.bump();
+                let rhs = self.expr_bp(bp::RANGE)?;
+                let span = start.to(rhs.span);
+                lhs = Expr::new(
+                    ExprKind::Binary(BinOp::Concat, Box::new(lhs), Box::new(rhs)),
+                    span,
+                );
+                continue;
+            }
             if min <= bp::RANGE && self.at_range_op() {
                 lhs = self.range_rest(lhs)?;
                 continue;
@@ -450,6 +492,7 @@ impl<'s> Parser<'s> {
                 "*" => (BinOp::Mul, bp::MUL, bp::MUL + 1),
                 "/" => (BinOp::Div, bp::MUL, bp::MUL + 1),
                 "%" => (BinOp::Mod, bp::MUL, bp::MUL + 1),
+                "//" => (BinOp::FloorDiv, bp::MUL, bp::MUL + 1),
                 "@" => (BinOp::MatMul, bp::MUL, bp::MUL + 1),
                 "**" | "^" => (BinOp::Pow, bp::POW, bp::UNARY),
                 _ => return None,
@@ -485,7 +528,7 @@ impl<'s> Parser<'s> {
     fn range_rest(&mut self, lhs: Expr) -> PResult<Expr> {
         let t = self.bump();
         let mut inclusive = match &t.tok {
-            Tok::Op("..") => false,
+            Tok::Op("..") => !self.rust_ranges,
             Tok::Op("..=") | Tok::Op("...") => true,
             Tok::Ident(w) => w != "until",
             _ => false,
@@ -874,6 +917,13 @@ impl<'s> Parser<'s> {
             {
                 return unary(self, UnOp::Not, bp::NOT);
             }
+            Tok::Op("#") => {
+                // Lua length: `#t` → `len(t)`.
+                let start = self.bump().span;
+                let operand = self.expr_bp(bp::UNARY)?;
+                let span = start.to(operand.span);
+                return Ok(self.call_expr("len", vec![operand], span));
+            }
             Tok::Ident(w) if w == "typeof" && starts_expr(self.nth(1)) => {
                 return unary(self, UnOp::TypeOf, bp::UNARY);
             }
@@ -1007,6 +1057,17 @@ impl<'s> Parser<'s> {
                 let body = self.body(h, true, terms::BASE)?;
                 self.maybe_end(h);
                 Ok(self.lambda(params, body, self.span_from(start)))
+            }
+            Tok::Op(":")
+                if matches!(self.nth(1).tok, Tok::Op(op) if ["+", "-", "*", "/", "%", "**", "&", "|", "^", "<<", ">>"].contains(&op))
+                    && !self.nth(1).space_before
+                    && (self.nth_is_op(2, ")") || self.nth_is_op(2, ",")) =>
+            {
+                // Ruby operator symbol `:+`.
+                self.bump();
+                let op = self.bump();
+                let Tok::Op(o) = op.tok else { return Err(()) };
+                Ok(Expr::new(ExprKind::Str(o.into()), self.span_from(start)))
             }
             Tok::Op(":") if self.nth(1).ident().is_some() && !self.nth(1).space_before => {
                 // Ruby symbol `:name`.
@@ -1256,6 +1317,9 @@ impl<'s> Parser<'s> {
             _ => {}
         }
         self.bump();
+        if w == "print" && self.kotlin_fun {
+            return Ok(Expr::new(ExprKind::Name(Sym::new("print_string")), start));
+        }
         Ok(Expr::new(ExprKind::Name(Sym::new(w)), start))
     }
 
@@ -1446,6 +1510,45 @@ impl<'s> Parser<'s> {
             return Ok(e);
         }
         self.bump();
+        // Haskell operator sections: `(+)`, `(* 3)`, `(2 ^)`, `(++ "!")`.
+        if let Tok::Op(op) = self.peek().tok
+            && is_section_op(op)
+        {
+            if self.nth_is_op(1, ")") {
+                self.bump();
+                self.bump();
+                return Ok(Expr::new(ExprKind::Str(op.into()), self.span_from(start)));
+            }
+            if op != "-" && op != "!" && op != "~" && op != "*"
+                || op == "*" && self.nth(1).space_before
+            {
+                let rhs = self.nested(|p| {
+                    p.bump();
+                    let e = p.expr()?;
+                    p.expect_op(")", "to close the operator section")?;
+                    Ok(e)
+                })?;
+                let span = self.span_from(start);
+                let opx = Expr::new(ExprKind::Str(op.into()), span);
+                return Ok(self.call_expr("__section_right", vec![opx, rhs], span));
+            }
+        }
+        if let Some(e) = self.attempt(|p| {
+            let lhs = p.nested(|p| p.postfix_expr())?;
+            let Tok::Op(op) = p.peek().tok else {
+                return Err(());
+            };
+            if !is_section_op(op) || !p.nth_is_op(1, ")") {
+                return Err(());
+            }
+            p.bump();
+            p.bump();
+            let span = p.span_from(start);
+            let opx = Expr::new(ExprKind::Str(op.into()), span);
+            Ok(p.call_expr("__section_left", vec![opx, lhs], span))
+        }) {
+            return Ok(e);
+        }
         self.nested(|p| {
             p.skip_newlines();
             if p.eat_op(")") {
@@ -1530,8 +1633,17 @@ impl<'s> Parser<'s> {
                     p.span_from(start),
                 ));
             }
+            // Rust array repeat: `[0; n]`.
+            if p.rust_ranges && p.at_op(";") {
+                p.bump();
+                let count = p.expr()?;
+                p.expect_op("]", "to close the array")?;
+                let span = p.span_from(start);
+                return Ok(p.call_expr("__array_of", vec![count, first], span));
+            }
             let mut items = vec![first];
-            while p.eat_op(",") {
+            // OCaml/F# separate list items with `;`.
+            while p.eat_op(",") || p.eat_op(";") {
                 p.skip_newlines();
                 if p.at_op("]") {
                     break;
@@ -1830,6 +1942,25 @@ impl<'s> Parser<'s> {
         if n2.is_op("}") || n2.is_word("for") {
             return false;
         }
+        // Lua tables: `{ name = "x", age = 3 }` — entries separated by
+        // commas on one line, with no `;` or line break before the `}`.
+        if n2.is_op("=") && n1.ident().is_some() {
+            let toks = self.toks_ref();
+            let mut depth = 0i32;
+            let mut i = self.pos_ref() + 3;
+            while let Some(t) = toks.get(i) {
+                match &t.tok {
+                    Tok::Op("(" | "[" | "{") => depth += 1,
+                    Tok::Op(")" | "]") => depth -= 1,
+                    Tok::Op("}") if depth == 0 => return false,
+                    Tok::Op("}") => depth -= 1,
+                    Tok::Op(";") | Tok::Newline | Tok::Eof if depth == 0 => return true,
+                    _ => {}
+                }
+                i += 1;
+            }
+            return true;
+        }
         n1.ident()
             .is_some_and(|w| is_reserved(w) || crate::parser::stmt::FN_WORDS.contains(&w))
             || n2.is_op("=")
@@ -1892,6 +2023,7 @@ impl<'s> Parser<'s> {
                 default: Some(Expr::new(ExprKind::Nil, start)),
                 ty: None,
                 kind: ParamKind::Normal,
+                label: None,
             }];
         } else {
             return Err(());
@@ -1953,6 +2085,7 @@ impl<'s> Parser<'s> {
                         default: None,
                         ty: None,
                         kind: ParamKind::Normal,
+                        label: None,
                     });
                 } else {
                     let (n, _) = self.expect_ident("")?;
@@ -1966,6 +2099,7 @@ impl<'s> Parser<'s> {
                         default,
                         ty: None,
                         kind: ParamKind::Normal,
+                        label: None,
                     });
                 }
                 if !self.eat_op(",") && python {
@@ -2059,6 +2193,7 @@ impl<'s> Parser<'s> {
                 default: None,
                 ty: None,
                 kind: ParamKind::Normal,
+                label: None,
             });
         }
         self.bump();
@@ -2081,10 +2216,52 @@ impl<'s> Parser<'s> {
             }
             let t = self.peek().clone();
             let start = e.span;
+            // Lua method calls: `s:upper()`, `("x"):rep(3)`, `obj:method "arg"`.
+            if t.is_op(":")
+                && !t.space_before
+                && !self.in_index
+                && self.nth(1).ident().is_some()
+                && !self.nth(1).space_before
+                && (self.nth_is_op(2, "(") && !self.nth(2).space_before
+                    || matches!(self.nth(2).tok, Tok::Str(_)))
+                && matches!(
+                    e.kind,
+                    ExprKind::Name(_)
+                        | ExprKind::Str(_)
+                        | ExprKind::Member { .. }
+                        | ExprKind::Call { .. }
+                        | ExprKind::Index { .. }
+                )
+            {
+                self.bump();
+                let (name, _) = self.expect_ident("")?;
+                let args = if self.at_op("(") {
+                    self.call_args()?
+                } else {
+                    vec![Arg::Pos(self.primary()?)]
+                };
+                let member = Expr::new(
+                    ExprKind::Member {
+                        object: Box::new(e),
+                        name,
+                        optional: false,
+                    },
+                    self.span_from(start),
+                );
+                e = Expr::new(
+                    ExprKind::Call {
+                        callee: Box::new(member),
+                        args,
+                    },
+                    self.span_from(start),
+                );
+                continue;
+            }
             match &t.tok {
                 Tok::Op("(")
                     if !t.line_start
-                        && (!t.space_before || self.call_with_space_ok(&e))
+                        && (!t.space_before
+                            || self.call_with_space_ok(&e) && !self.paren_followed_by_atom())
                         && !matches!(
                             e.kind,
                             ExprKind::Int(_) | ExprKind::Float(_) | ExprKind::BigInt(_)
@@ -2162,6 +2339,19 @@ impl<'s> Parser<'s> {
                         },
                         self.span_from(start),
                     );
+                    // Ruby: `Foo.new` without parentheses constructs.
+                    if name.is("new")
+                        && !(self.at_op("(") && !self.peek().space_before)
+                        && !self.at_op("=")
+                    {
+                        e = Expr::new(
+                            ExprKind::Call {
+                                callee: Box::new(e),
+                                args: Vec::new(),
+                            },
+                            self.span_from(start),
+                        );
+                    }
                 }
                 Tok::Op("!")
                     if !t.space_before && !self.nth_is_op(1, "=") && !self.nth_is_op(1, "!") =>
@@ -2276,12 +2466,15 @@ impl<'s> Parser<'s> {
                     && self.same_line()
                     && matches!(e.kind, ExprKind::Name(_) | ExprKind::Member { .. })
                     && !matches!(&e.kind, ExprKind::Name(n) if is_reserved(&n.as_str()))
-                    && atom_start(&t) =>
+                    && (atom_start(&t)
+                        || t.is_op("(") && t.space_before && self.paren_followed_by_atom()) =>
                 {
                     // Haskell/OCaml application by juxtaposition: `fact 5`,
-                    // `even x`, `max a b`.
+                    // `even x`, `max a b`, `foldr (+) 0 xs`.
                     let mut args = Vec::new();
-                    while self.same_line() && atom_start(self.peek()) {
+                    while self.same_line()
+                        && (atom_start(self.peek()) || self.at_op("(") && self.peek().space_before)
+                    {
                         let saved = self.no_juxtapose;
                         self.no_juxtapose = true;
                         let arg = self.postfix_expr();
@@ -2319,6 +2512,66 @@ impl<'s> Parser<'s> {
             }
         }
         Ok(e)
+    }
+
+    /// `f (x) y`: a spaced parenthesised group followed by another argument
+    /// is Haskell application, not call parentheses.
+    fn paren_followed_by_atom(&self) -> bool {
+        let toks = self.toks_ref();
+        let mut depth = 0;
+        let mut i = self.pos_ref();
+        while let Some(t) = toks.get(i) {
+            match &t.tok {
+                Tok::Op("(" | "[" | "{") => depth += 1,
+                Tok::Op(")" | "]" | "}") => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                Tok::Eof => return false,
+                _ => {}
+            }
+            i += 1;
+        }
+        toks.get(i + 1).is_some_and(|n| {
+            n.line == toks[i].line && (atom_start(n) || n.is_op("(") && n.space_before)
+        })
+    }
+
+    /// Ruby's `puts (1..10).to_a`: a spaced `(` whose group is followed by
+    /// `.`, `[` or an operator is the start of the argument, not call parens.
+    fn paren_starts_argument(&self) -> bool {
+        self.paren_starts_argument_at(0)
+    }
+
+    fn paren_starts_argument_at(&self, offset: usize) -> bool {
+        let toks = self.toks_ref();
+        let mut depth = 0;
+        let mut i = self.pos_ref() + offset;
+        while let Some(t) = toks.get(i) {
+            match &t.tok {
+                Tok::Op("(" | "[" | "{") => depth += 1,
+                Tok::Op(")" | "]" | "}") => {
+                    depth -= 1;
+                    if depth == 0 {
+                        break;
+                    }
+                }
+                Tok::Eof => return false,
+                _ => {}
+            }
+            i += 1;
+        }
+        toks.get(i + 1).is_some_and(|n| {
+            n.line == toks[i].line
+                && matches!(
+                    &n.tok,
+                    Tok::Op(
+                        "." | "[" | "+" | "-" | "*" | "/" | "%" | "**" | ".." | "..." | "&." | "<<"
+                    )
+                )
+        })
     }
 
     fn call_with_space_ok(&self, callee: &Expr) -> bool {
@@ -2436,6 +2689,7 @@ impl<'s> Parser<'s> {
                 default: Some(Expr::new(ExprKind::Nil, span)),
                 ty: None,
                 kind: ParamKind::Normal,
+                label: None,
             }];
             def.implicit_params = true;
         }
@@ -2454,6 +2708,14 @@ impl<'s> Parser<'s> {
 
     /// Index contents: plain index, slice `a:b:c`, or multi-dimensional `i, j`.
     fn index_expr(&mut self) -> PResult<Expr> {
+        let saved = self.in_index;
+        self.in_index = true;
+        let r = self.index_expr_inner();
+        self.in_index = saved;
+        r
+    }
+
+    fn index_expr_inner(&mut self) -> PResult<Expr> {
         let first = self.slice_part()?;
         if !self.at_op(",") {
             return Ok(first);
@@ -2545,7 +2807,11 @@ impl<'s> Parser<'s> {
                 } else if let Tok::Ident(w) = &p.peek().tok
                     && (p.nth_is_op(1, ":") && !p.nth_is_op(1, "::")
                         || p.nth_is_op(1, "=") && !p.nth_is_op(1, "=="))
-                    && !is_reserved(w)
+                    && (!is_reserved(w)
+                        // Swift labels may be keywords: `greet(from: "x")`, `index(of: 3)`.
+                        || p.nth_is_op(1, ":")
+                            && p.nth(2).space_before
+                            && !matches!(w.as_str(), "lambda" | "if" | "else" | "for" | "while" | "case" | "default"))
                 {
                     let name = Sym::new(w);
                     p.bump();
@@ -2648,6 +2914,7 @@ impl<'s> Parser<'s> {
 
     fn command_call(&mut self, callee: Expr) -> PResult<Expr> {
         let start = callee.span;
+
         let mut args = Vec::new();
         loop {
             if let Tok::Ident(w) = &self.peek().tok
@@ -2661,7 +2928,15 @@ impl<'s> Parser<'s> {
                 self.bump();
                 args.push(Arg::Named(name, self.expr()?));
             } else {
-                args.push(Arg::Pos(self.expr()?));
+                let e = self.expr()?;
+                // Ruby `puts greet`: a bare named method is called.
+                let e = if matches!(e.kind, ExprKind::Name(_)) {
+                    let span = e.span;
+                    self.call_expr("__autocall", vec![e], span)
+                } else {
+                    e
+                };
+                args.push(Arg::Pos(e));
             }
             if self.eat_op(",") {
                 self.skip_newlines();
@@ -2711,6 +2986,7 @@ impl<'s> Parser<'s> {
                     && !self.nth_is_op(n + 1, "<-")
             }
             Tok::Op("[") => print_like(callee),
+            Tok::Op("(") => self.paren_starts_argument_at(n),
             Tok::Op("-") | Tok::Op("+") => print_like(callee) && tight(1),
             Tok::Op("!") => tight(1),
             Tok::Op(":") => self.nth(n + 1).ident().is_some() && tight(1),
@@ -3396,6 +3672,7 @@ pub(crate) fn starts_expr(t: &crate::lexer::Token) -> bool {
                 | "->"
                 | "++"
                 | "--"
+                | "#"
         ),
         _ => false,
     }
@@ -3574,4 +3851,30 @@ fn go_shape(lit: Expr, ty: &TypeExpr) -> Expr {
         }
         (kind, _) => Expr::new(kind, span),
     }
+}
+
+/// Operators that can form a Haskell section: `(+)`, `(* 2)`, `(x <)`.
+fn is_section_op(op: &str) -> bool {
+    matches!(
+        op,
+        "+" | "-"
+            | "*"
+            | "/"
+            | "^"
+            | "**"
+            | "%"
+            | "++"
+            | "=="
+            | "/="
+            | "!="
+            | "<"
+            | ">"
+            | "<="
+            | ">="
+            | "&&"
+            | "||"
+            | "."
+            | "<>"
+            | "!!"
+    )
 }

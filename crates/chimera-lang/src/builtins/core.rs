@@ -159,6 +159,10 @@ pub fn exit_flow(interp: &mut Interp, code: i64, span: Span) -> Flow {
 
 /// Installs the global functions.
 pub fn install(interp: &mut Interp) {
+    interp
+        .builtins
+        .insert(sym("__name__"), Value::str("__main__"));
+
     // ----- iteration ---------------------------------------------------------
     def(interp, &["next"], |interp, args| {
         let it = arg(interp, &args, 0, "next")?;
@@ -180,11 +184,12 @@ pub fn install(interp: &mut Interp) {
 
     // ----- output ----------------------------------------------------------
     def(interp, &["print"], |interp, args| {
-        let sep = match args.named("sep") {
+        let sep = match args.named("sep").or_else(|| args.named("separator")) {
             Some(v) => interp.to_str(&v)?,
             None => " ".into(),
         };
-        let end = match args.named("end") {
+        // Python's `end=`, Swift's `terminator:`.
+        let end = match args.named("end").or_else(|| args.named("terminator")) {
             Some(v) => interp.to_str(&v)?,
             None => "\n".into(),
         };
@@ -265,7 +270,7 @@ pub fn install(interp: &mut Interp) {
             })
         },
     );
-    def(interp, &["printf", "Printf"], |interp, args| {
+    def(interp, &["printf"], |interp, args| {
         let fmt = str_arg(interp, &args, 0, "printf")?;
         let s = interp.printf(&fmt, &args.pos[1..], args.span)?;
         interp.write_out(&s);
@@ -1510,6 +1515,40 @@ pub fn install(interp: &mut Interp) {
         let fill = args.get(1).cloned().unwrap_or(Value::Int(0));
         Ok(Value::list(vec![fill; n]))
     });
+    // Ruby's parenthesis-free calls: `puts greet` calls `greet` when it is
+    // a named function needing no arguments.
+    def(interp, &["__autocall"], |interp, args| {
+        let v = args.get(0).cloned().unwrap_or(Value::Nil);
+        match &v {
+            Value::Func(c)
+                if c.def.name.is_some() && c.required_params() == 0 && !c.def.is_generator() =>
+            {
+                let span = args.span;
+                interp.call_value(v.clone(), Args::new(Vec::new(), span))
+            }
+            _ => Ok(v),
+        }
+    });
+    // Haskell sections: `(* 3)` and `(2 ^)`.
+    for (name, right) in [("__section_right", true), ("__section_left", false)] {
+        def(interp, &[name], move |interp, args| {
+            let op = arg(interp, &args, 0, "section")?;
+            let operand = arg(interp, &args, 1, "section")?;
+            let op = match &op {
+                Value::Str(s) if &**s == "^" => Value::str("**"),
+                other => other.clone(),
+            };
+            Ok(Value::native("section", move |interp, args| {
+                let x = args.get(0).cloned().unwrap_or(Value::Nil);
+                let pair = if right {
+                    vec![x, operand.clone()]
+                } else {
+                    vec![operand.clone(), x]
+                };
+                interp.call_value(op.clone(), Args::new(pair, args.span))
+            }))
+        });
+    }
     // Go's comma-ok: `v, ok := m[key]`.
     def(interp, &["__comma_ok"], |interp, args| {
         let obj = arg(interp, &args, 0, "comma-ok")?;

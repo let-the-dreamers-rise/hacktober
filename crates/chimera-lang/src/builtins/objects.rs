@@ -595,6 +595,20 @@ pub fn install(interp: &mut Interp) {
         ("console", console),
         ("System", system),
         ("Console", cs_console),
+        (
+            "Printf",
+            module(
+                "Printf",
+                alias(
+                    interp,
+                    &[
+                        ("printf", "printf"),
+                        ("sprintf", "sprintf"),
+                        ("eprintf", "printf"),
+                    ],
+                ),
+            ),
+        ),
         ("fmt", fmt),
         ("IO", io),
         ("Math", js_math),

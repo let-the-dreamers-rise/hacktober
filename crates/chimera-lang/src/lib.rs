@@ -81,6 +81,7 @@ impl std::error::Error for Error {}
 pub struct Engine {
     interp: Interp,
     color: bool,
+    auto_main: bool,
 }
 
 impl Default for Engine {
@@ -96,6 +97,7 @@ impl Engine {
         Engine {
             interp: Interp::new(),
             color: false,
+            auto_main: true,
         }
     }
 
@@ -109,6 +111,12 @@ impl Engine {
     /// Colours error reports with ANSI escapes.
     pub fn set_color(&mut self, color: bool) {
         self.color = color;
+    }
+
+    /// Whether a `main` function that the program defines but never calls
+    /// runs after the top level (on by default; the REPL turns it off).
+    pub fn set_auto_main(&mut self, on: bool) {
+        self.auto_main = on;
     }
 
     /// Buffers program output instead of writing it to stdout.
@@ -151,10 +159,62 @@ impl Engine {
         }
         let result = self.interp.run_program(&stmts, file);
         let result = result.and_then(|v| self.interp.flush_defers().map(|()| v));
+        let result = match result {
+            Ok(v) if self.auto_main && !self.interp.main_called => {
+                self.run_main(file).map(|r| r.unwrap_or(v))
+            }
+            other => other,
+        };
         match result {
             Ok(v) => Ok(v),
             Err(flow) => Err(self.runtime_error(flow)),
         }
+    }
+
+    /// Calls the program's `main` — a top-level function or a class's
+    /// static `main` (Java, C#) — if it was defined but not called.
+    fn run_main(&mut self, file: FileId) -> Result<Option<Value>, Flow> {
+        let main = symbol::Sym::new("main");
+        let mut target = match self.interp.globals.get(main) {
+            Some(f @ Value::Func(_)) => Some(f),
+            _ => None,
+        };
+        if target.is_none() {
+            for (_, v) in self.interp.globals.local_bindings() {
+                if let Value::Class(c) = &v
+                    && let Some(f) = c.find_static(main)
+                {
+                    target = Some(f);
+                    break;
+                }
+            }
+        }
+        let Some(f) = target else { return Ok(None) };
+        let wants_args = matches!(&f, Value::Func(c) if !c.def.params.is_empty());
+        let args = if wants_args {
+            let argv = self
+                .interp
+                .builtins
+                .get(&symbol::Sym::new("__argv"))
+                .cloned()
+                .unwrap_or(Value::list(Vec::new()));
+            // `main(String[] args)` gets the arguments after the program name.
+            let rest = match &argv {
+                Value::List(l) => Value::list(l.borrow().iter().skip(1).cloned().collect()),
+                other => other.clone(),
+            };
+            vec![rest]
+        } else {
+            Vec::new()
+        };
+        let saved = self.interp.cur_file;
+        self.interp.cur_file = file;
+        let r = self
+            .interp
+            .call_value(f, interp::Args::new(args, Span::default()));
+        self.interp.cur_file = saved;
+        let r = r.and_then(|v| self.interp.flush_defers().map(|()| v));
+        r.map(Some)
     }
 
     /// Parses `src` and returns the syntax tree (for `chimera explain`).

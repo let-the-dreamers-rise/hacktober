@@ -571,6 +571,8 @@ pub struct Param {
     pub ty: Option<TypeExpr>,
     /// Ordinary, `*rest` or `**kwargs`.
     pub kind: ParamKind,
+    /// Swift argument label (`from` in `func greet(from town: String)`).
+    pub label: Option<Sym>,
 }
 
 impl Param {

@@ -66,7 +66,8 @@ fn shape_args(interp: &mut Interp, args: &Args, name: &str) -> R<Vec<usize>> {
             other => match other.as_int() {
                 Some(d) => dims.push(d.max(0) as usize),
                 None => {
-                    return interp.type_err(format!("`{name}` needs integer dimensions"), args.span);
+                    return interp
+                        .type_err(format!("`{name}` needs integer dimensions"), args.span);
                 }
             },
         }

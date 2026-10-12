@@ -149,6 +149,7 @@ impl Parser<'_> {
                     return self.expr_stmt_from(e);
                 }
                 "while" | "until" => return self.while_stmt(h),
+                "guard" if !next.is_op("=") && !next.is_op("(") || next.space_before => return self.guard_stmt(h),
                 "loop" | "forever"
                     if next.is_op("{")
                         || next.is_op(":")
@@ -225,6 +226,11 @@ impl Parser<'_> {
         }
 
         if self.peek().ident().is_some() {
+            // Haskell type signatures: `fib :: Int -> Int` (spaced `::`).
+            if self.nth_is_op(1, "::") && self.nth(1).space_before && self.nth(2).space_before {
+                self.skip_line_balanced();
+                return Ok(self.make_stmt(StmtKind::Pass, start));
+            }
             if let Some(s) = self.attempt(|p| p.c_decl(h)) {
                 return Ok(s);
             }
@@ -422,6 +428,26 @@ impl Parser<'_> {
 
     /// `fn name(params) -> T { … }` and all its cousins.
     pub(crate) fn fn_decl(
+        &mut self,
+        h: Header,
+        decorators: Vec<Expr>,
+        is_static: bool,
+    ) -> PResult<Stmt> {
+        let saved = (self.rust_ranges, self.kotlin_fun);
+        if self.at_word("fn") {
+            self.rust_ranges = true;
+        }
+        if self.at_word("fun") {
+            self.kotlin_fun = true;
+        } else {
+            self.kotlin_fun = false;
+        }
+        let r = self.fn_decl_inner(h, decorators, is_static);
+        (self.rust_ranges, self.kotlin_fun) = saved;
+        r
+    }
+
+    fn fn_decl_inner(
         &mut self,
         h: Header,
         decorators: Vec<Expr>,
@@ -702,6 +728,7 @@ impl Parser<'_> {
                 default,
                 ty: None,
                 kind,
+                label: None,
             });
         }
 
@@ -711,9 +738,10 @@ impl Parser<'_> {
             return self.err(first.span, format!("expected a parameter, found {found}"));
         };
 
-        // Swift external labels: `_ name: T`, `to name: T`.
+        // Swift external labels: `_ name: T`, `from hometown: T`.
+        let mut label = None;
         if self.nth(1).ident().is_some() && self.nth_is_op(2, ":") {
-            self.bump();
+            label = self.bump().ident().filter(|w| *w != "_").map(Sym::new);
         }
         let mut ty = None;
         let name;
@@ -780,6 +808,7 @@ impl Parser<'_> {
             default,
             ty,
             kind,
+            label,
         })
     }
 
@@ -816,6 +845,7 @@ impl Parser<'_> {
                 default: None,
                 ty: None,
                 kind: ParamKind::Normal,
+                label: None,
             });
         }
         Ok(params)
@@ -1155,7 +1185,8 @@ impl Parser<'_> {
         let line = self.peek().line;
         self.bump();
         let mut params = Vec::new();
-        while self.peek().line == line && !self.at_op("=") && !self.at_op("|") {
+        while self.peek().line == line && !self.at_newline() && !self.at_op("=") && !self.at_op("|")
+        {
             if !self.peek().space_before {
                 return Err(());
             }
@@ -1178,10 +1209,30 @@ impl Parser<'_> {
                 default: None,
                 ty: None,
                 kind: ParamKind::Normal,
+                label: None,
             });
         }
         if params.is_empty() {
+            // `main = do …`: a Haskell action is a definition, run when called.
+            if self.at_op("=") && self.nth_is_word(1, "do") {
+                self.bump();
+                let e = self.expr()?;
+                self.end_stmt()?;
+                let span = self.span_from(start);
+                let def = self.new_fn(Some(name), Vec::new(), Block::of_expr(e), span);
+                return Ok(Stmt {
+                    kind: StmtKind::Fn(Rc::new(def)),
+                    span,
+                });
+            }
             return Err(());
+        }
+        // Guards may start on the next line.
+        if self.at_newline()
+            && self.peek_past_newlines().is_op("|")
+            && self.peek_past_newlines().col > h.indent
+        {
+            self.skip_newlines();
         }
         let body = if self.at_op("|") {
             // Guards.
@@ -2169,6 +2220,42 @@ impl Parser<'_> {
         Ok(self.make_stmt(StmtKind::Repeat { count, body }, start))
     }
 
+    /// Swift: `guard cond else { … }` runs the block when `cond` fails;
+    /// `guard let x = opt else { return }` binds `x` for the rest of the scope.
+    fn guard_stmt(&mut self, h: Header) -> PResult<Stmt> {
+        let start = self.bump().span;
+        let mut conds = vec![self.in_header(|p| p.expr())?];
+        while self.eat_op(",") {
+            conds.push(self.in_header(|p| p.expr())?);
+        }
+        self.expect_word("else", "after the `guard` condition")?;
+        let body = self.body(h, false, terms::BASE)?;
+        let mut cond = conds.remove(0);
+        for c in conds {
+            let span = cond.span.to(c.span);
+            cond = Expr::new(ExprKind::And(Box::new(cond), Box::new(c)), span);
+        }
+        let span = self.span_from(start);
+        let negated = Expr::new(ExprKind::Unary(UnOp::Not, Box::new(cond)), span);
+        let e = self.mk_if(negated, body, None, span);
+        Ok(Stmt {
+            kind: StmtKind::Expr(e),
+            span,
+        })
+    }
+
+    /// Whether the current line ends with `{`.
+    fn line_ends_with_brace(&self) -> bool {
+        let line = self.peek().line;
+        let mut i = 0;
+        let mut last = None;
+        while self.nth(i).line == line && !matches!(self.nth(i).tok, Tok::Newline | Tok::Eof) {
+            last = Some(i);
+            i += 1;
+        }
+        last.is_some_and(|i| self.nth(i).is_op("{"))
+    }
+
     fn for_stmt(&mut self, h: Header) -> PResult<Stmt> {
         let start = self.bump().span;
         let _each = self.eat_word("each") || self.eat_word("every");
@@ -2179,12 +2266,18 @@ impl Parser<'_> {
         if parens {
             self.bump();
         }
+        // Rust's `for i in 0..n {` excludes `n`.
+        let saved = self.rust_ranges;
+        if !parens && self.line_ends_with_brace() {
+            self.rust_ranges = true;
+        }
         let result = self.in_header(|p| {
             if parens {
                 p.no_brace = false;
             }
             p.for_header(parens)
         });
+        self.rust_ranges = saved;
         let (pattern, iter) = result?;
         if parens {
             self.expect_op(")", "to close the `for` header")?;

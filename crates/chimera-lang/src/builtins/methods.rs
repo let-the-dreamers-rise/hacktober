@@ -423,8 +423,13 @@ pub fn property(interp: &mut Interp, v: &Value, name: &str, span: Span) -> R<Opt
         | "values" | "items" | "entries" | "sum" | "min" | "max" | "reverse" | "reversed"
         | "sorted" | "upper" | "lower" | "upcase" | "downcase" | "strip" | "trim" | "chars"
         | "abs" | "floor" | "ceil" | "round" | "to_s" | "to_i" | "to_f" | "capitalize" | "uniq"
-        | "flatten" | "compact" | "lines" | "words" | "average" | "mean" | "negate"
-            if sized || v.is_number() =>
+        | "flatten" | "compact" | "lines" | "words" | "average" | "mean" | "negate" | "pop"
+        | "shift" | "inspect" | "to_a" | "sort" | "to_h" | "odd?" | "even?" | "zero?"
+        | "positive?" | "negative?" | "any?" | "none?" | "all?" | "succ" | "pred" | "chomp"
+        | "chop" | "sample" | "shuffle" | "to_sym" | "dup" | "clone" | "freeze" | "frozen?"
+        | "swapcase" | "squeeze" | "tally" | "minmax" | "cycle" | "each_slice" | "transpose"
+        | "zip" | "rotate" | "bytes" | "ord" | "chr" | "digits" | "bit_length"
+            if (sized || v.is_number()) && !matches!((v, name), (Value::Range(_), "step")) =>
         {
             call_named(interp, v, name, Vec::new(), span)?
         }
@@ -474,6 +479,33 @@ fn call_impl(interp: &mut Interp, v: &Value, name: &str, args: Args) -> R<Option
                 }
                 _ => None,
             }
+        }
+        Value::Range(r)
+            if matches!(
+                name,
+                "step" | "step_by" | "by" | "rev" | "reversed" | "reverse_each"
+            ) && args.pos.len() <= 1 =>
+        {
+            // `(1..10).step(3)`, Rust `(0..10).step_by(2)`, `(0..5).rev()`.
+            let rv = if name.starts_with("rev") {
+                let last = r.start + ((r.len() as i64 - 1).max(0)) * r.step;
+                RangeVal {
+                    start: if r.is_empty() { r.start } else { last },
+                    end: r.start - r.step.signum(),
+                    step: -r.step,
+                }
+            } else {
+                let k = args.get(0).and_then(Value::as_int).unwrap_or(1);
+                if k == 0 {
+                    return Err(interp.error("ValueError", "step cannot be zero", args.span));
+                }
+                RangeVal {
+                    start: r.start,
+                    end: r.end,
+                    step: r.step * k,
+                }
+            };
+            Some(Value::Range(Rc::new(rv)))
         }
         Value::Range(_) | Value::Set(_) => {
             let items = interp.collect(v, args.span)?;
@@ -544,10 +576,14 @@ fn call_impl(interp: &mut Interp, v: &Value, name: &str, args: Args) -> R<Option
                             }
                         }
                         "issubset" => {
-                            return Ok(Some(Value::Bool(mine.keys().iter().all(|k| o.contains(k)))));
+                            return Ok(Some(Value::Bool(
+                                mine.keys().iter().all(|k| o.contains(k)),
+                            )));
                         }
                         "issuperset" => {
-                            return Ok(Some(Value::Bool(o.keys().iter().all(|k| mine.contains(k)))));
+                            return Ok(Some(Value::Bool(
+                                o.keys().iter().all(|k| mine.contains(k)),
+                            )));
                         }
                         _ => {
                             return Ok(Some(Value::Bool(
@@ -860,7 +896,7 @@ fn str_method(interp: &mut Interp, s: &Rc<str>, name: &str, args: &Args) -> R<Op
             Value::list(st.chars().map(|c| Value::str(&c.to_string())).collect())
         }
         "reverse" | "reversed" => Value::str(&st.chars().rev().collect::<String>()),
-        "repeat" | "times_str" => {
+        "repeat" | "times_str" | "rep" => {
             let n = super::int_arg(interp, args, 0, name)?.clamp(0, 10_000_000) as usize;
             Value::str(&st.repeat(n))
         }
@@ -1222,19 +1258,31 @@ fn list_method(
             }
         },
         "index" | "indexOf" | "find_index" | "findIndex" | "IndexOf" | "position"
-        | "lastIndexOf" => {
-            let target = super::arg(interp, args, 0, name)?;
-            let all = items();
-            let order: Box<dyn Iterator<Item = (usize, &Value)>> = if name == "lastIndexOf" {
-                Box::new(all.iter().enumerate().rev())
-            } else {
-                Box::new(all.iter().enumerate())
+        | "lastIndexOf" | "firstIndex" | "lastIndex" => {
+            // Swift: `firstIndex(of: x)`, `firstIndex(where: pred)`.
+            let target = match args
+                .get(0)
+                .cloned()
+                .or_else(|| args.named("of"))
+                .or_else(|| args.named("where"))
+            {
+                Some(t) => t,
+                None => super::arg(interp, args, 0, name)?,
             };
+            let all = items();
+            let order: Box<dyn Iterator<Item = (usize, &Value)>> =
+                if name == "lastIndexOf" || name == "lastIndex" {
+                    Box::new(all.iter().enumerate().rev())
+                } else {
+                    Box::new(all.iter().enumerate())
+                };
             let mut found = None;
             for (i, y) in order {
                 let hit = if target.is_callable()
-                    && matches!(name, "find_index" | "findIndex" | "position")
-                {
+                    && matches!(
+                        name,
+                        "find_index" | "findIndex" | "position" | "firstIndex" | "lastIndex"
+                    ) {
                     call(interp, &target, vec![y.clone()], span)?.truthy()
                 } else {
                     interp.values_equal(y, &target)?
@@ -1467,7 +1515,8 @@ fn list_method(
             Value::Nil
         }
         "min" | "max" | "Min" | "Max" | "minimum" | "maximum" | "min_by" | "max_by" | "minBy"
-        | "maxBy" | "minOf" | "maxOf" => {
+        | "maxBy" | "minOf" | "maxOf" | "maxByOrNull" | "minByOrNull" | "maxOrNull"
+        | "minOrNull" => {
             let all = items();
             let want_max = name.to_ascii_lowercase().starts_with("max");
             if all.is_empty() {
