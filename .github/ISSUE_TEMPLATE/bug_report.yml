@@ -1,0 +1,65 @@
+name: Bug report
+description: A program that should work doesn't, or works wrongly.
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for reporting! The smaller the program, the faster the fix.
+        `chimera explain your_file.chi` shows how each line was understood,
+        which is often enough to pinpoint the problem.
+  - type: textarea
+    id: program
+    attributes:
+      label: Program
+      description: The smallest Chimera program that shows the problem.
+      render: python
+      placeholder: |
+        fn first_even(xs: Vec<i64>) -> Option<i64> {
+            xs.iter().find(|x| *x % 2 == 0).copied()
+        }
+        print(first_even(vec![1, 3, 4]))
+    validations:
+      required: true
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected output
+      description: What the program should print. If it mimics a language, what does that language do?
+    validations:
+      required: true
+  - type: textarea
+    id: actual
+    attributes:
+      label: Actual output
+      description: What Chimera printed, including the full error message.
+      render: text
+    validations:
+      required: true
+  - type: dropdown
+    id: dialect
+    attributes:
+      label: Dialect
+      description: Which language's syntax does the failing line use?
+      multiple: true
+      options:
+        - Python
+        - JavaScript / TypeScript
+        - C / C++
+        - Java / C#
+        - Go
+        - Rust
+        - Ruby
+        - Lua
+        - Haskell / OCaml
+        - Kotlin / Swift
+        - SQL / LINQ
+        - English / please
+        - ML syntax (model, train, f′, ∇)
+        - AI (ai, sentiment, classify, …)
+        - Other / mixed
+  - type: input
+    id: version
+    attributes:
+      label: Version
+      description: Output of `chimera version`, or the commit you built from.

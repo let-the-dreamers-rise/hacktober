@@ -247,12 +247,12 @@ a satisfying pull request.
 
 ### Good first issues (builtins and prelude, no parser work)
 
-- **Go's `strings` and `strconv` packages**: `strings.ToUpper`,
-  `strings.Split`, `strings.Contains`, `strings.Repeat`, `strconv.Itoa`,
-  `strconv.Atoi`. A namespace object in `builtins/objects.rs`, aliasing
-  existing builtins.
+- **Fill out Go's `strings` and `strconv` packages**: `strings.Count`,
+  `strings.Title`, `strings.TrimLeft`/`TrimRight`, `strings.EqualFold`,
+  `strconv.ParseBool`. They live in `builtins/modules.rs`, and most can alias
+  an existing builtin.
 - **OCaml's printing functions**: `print_int`, `print_float`,
-  `print_endline`, `string_of_int`, `int_of_string`.
+  `print_char` (`print_endline` and `string_of_int` already exist).
 - **MATLAB/Octave helpers**: `numel`, `isempty`, `fliplr`.
 - **Ruby enumerators without a block**: `10.times.to_a`, `3.times.map { … }`,
   `"abc".each_char.to_a`.
@@ -275,6 +275,9 @@ a satisfying pull request.
 
 ### Advanced
 
+- **Regular expressions**: a small backtracking regex engine (no
+  dependencies) behind Python's `re`, JavaScript's `/…/g` literals and
+  `.match`/`.replace`, and Ruby's `=~`. This one is big and very visible.
 - **A Lisp dialect**: `(defn sq [x] (* x x))`. S-expressions are easy to
   parse but hard to tell apart from parenthesised expressions. Design first,
   then open an issue.

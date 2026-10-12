@@ -1,0 +1,8 @@
+blank_issues_enabled: true
+contact_links:
+  - name: Contributor guide
+    url: https://github.com/let-the-dreamers-rise/hacktober/blob/HEAD/CONTRIBUTING.md
+    about: How to set up, where things live, and issue ideas for every level.
+  - name: Report a security vulnerability
+    url: https://github.com/let-the-dreamers-rise/hacktober/security/advisories/new
+    about: Please report security problems privately, not as public issues.

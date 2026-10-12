@@ -1,0 +1,39 @@
+name: Teach Chimera new syntax
+description: A construct from some language that Chimera doesn't understand yet.
+labels: [dialect, enhancement]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Chimera tries to run any reasonable line of code. If yours doesn't
+        run, tell us about it. Ideas with a clear, unambiguous syntax are
+        great Hacktoberfest issues.
+  - type: input
+    id: language
+    attributes:
+      label: Language
+      placeholder: Scala
+    validations:
+      required: true
+  - type: textarea
+    id: example
+    attributes:
+      label: Example
+      description: A few lines using the construct, and what they should print.
+      render: text
+      placeholder: |
+        val doubled = List(1, 2, 3).map(_ * 2)
+        println(doubled)   // List(2, 4, 6)
+    validations:
+      required: true
+  - type: textarea
+    id: conflicts
+    attributes:
+      label: Possible conflicts
+      description: Could this syntax mean something else in another language Chimera supports? (For example, `_` is a wildcard pattern in Rust and Haskell.) It's fine to say "not sure".
+  - type: checkboxes
+    id: contribute
+    attributes:
+      label: Contributing
+      options:
+        - label: I'd like to implement this myself
