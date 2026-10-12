@@ -1,0 +1,35 @@
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
+version = "0.1.0"
+edition = "2024"
+license = "MIT"
+repository = "https://github.com/let-the-dreamers-rise/hacktober"
+authors = ["Chimera contributors"]
+
+[workspace.dependencies]
+chimera-core = { path = "crates/chimera-core" }
+chimera-lang = { path = "crates/chimera-lang" }
+chimera-db = { path = "crates/chimera-db" }
+chimera-raft = { path = "crates/chimera-raft" }
+chimera-render = { path = "crates/chimera-render" }
+
+[workspace.lints.rust]
+unsafe_code = "forbid"
+missing_debug_implementations = "warn"
+
+[workspace.lints.clippy]
+dbg_macro = "warn"
+todo = "warn"
+
+# Path tracing and chaos simulation are painfully slow unoptimised, so even
+# debug/test builds get some optimisation.
+[profile.dev]
+opt-level = 1
+
+[profile.release]
+lto = "thin"
+codegen-units = 1
+debug = "line-tables-only"

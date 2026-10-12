@@ -1,0 +1,19 @@
+[package]
+name = "chimera"
+description = "Chimera: a programming language, SQL database, Raft cluster and path tracer in one binary"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+authors.workspace = true
+default-run = "chimera"
+
+[dependencies]
+chimera-core.workspace = true
+chimera-lang.workspace = true
+chimera-db.workspace = true
+chimera-raft.workspace = true
+chimera-render.workspace = true
+
+[lints]
+workspace = true

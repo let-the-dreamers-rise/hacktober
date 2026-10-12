@@ -1,0 +1,16 @@
+/target
+**/*.rs.bk
+*.pdb
+
+# Render output and scratch databases
+*.ppm
+*.png
+!docs/**/*.png
+*.chdb
+*.chdb-wal
+
+# Editors / OS
+.idea/
+.vscode/
+*.swp
+.DS_Store
