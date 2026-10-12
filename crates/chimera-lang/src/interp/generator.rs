@@ -54,6 +54,13 @@ enum GStmt {
         iter: Expr,
         body: GBlock,
     },
+    /// C-style `for (init; cond; step)`.
+    CFor {
+        init: Option<Stmt>,
+        cond: Option<Expr>,
+        step: Option<Expr>,
+        body: GBlock,
+    },
     Loop(GBlock),
     Repeat {
         count: Expr,
@@ -147,7 +154,24 @@ fn compile_stmt(def: &FnDef, s: &Stmt) -> Result<GStmt, (String, Span)> {
         }),
         StmtKind::Try { .. } => unsupported("`try`"),
         StmtKind::Switch { .. } => unsupported("`switch`"),
-        StmtKind::CFor { .. } => unsupported("a C-style `for`"),
+        StmtKind::CFor {
+            init,
+            cond,
+            step,
+            body,
+        } => {
+            if cond.as_ref().is_some_and(|c| def.yields_in(c.span))
+                || step.as_ref().is_some_and(|c| def.yields_in(c.span))
+            {
+                return unsupported("a loop header");
+            }
+            Ok(GStmt::CFor {
+                init: init.as_deref().cloned(),
+                cond: cond.clone(),
+                step: step.clone(),
+                body: compile(def, body)?,
+            })
+        }
         _ => unsupported("this statement"),
     }
 }
@@ -242,6 +266,12 @@ enum Frame {
     Loop {
         body: GBlock,
     },
+    CFor {
+        cond: Option<Expr>,
+        step: Option<Expr>,
+        body: GBlock,
+        started: bool,
+    },
     Repeat {
         remaining: i64,
         body: GBlock,
@@ -255,7 +285,11 @@ impl Frame {
     fn is_loop(&self) -> bool {
         matches!(
             self,
-            Frame::While { .. } | Frame::For { .. } | Frame::Loop { .. } | Frame::Repeat { .. }
+            Frame::While { .. }
+                | Frame::For { .. }
+                | Frame::Loop { .. }
+                | Frame::CFor { .. }
+                | Frame::Repeat { .. }
         )
     }
 }
@@ -474,6 +508,22 @@ impl Generator {
                             });
                         }
                         GStmt::Loop(body) => self.push(Frame::Loop { body: body.clone() }),
+                        GStmt::CFor {
+                            init,
+                            cond,
+                            step,
+                            body,
+                        } => {
+                            if let Some(s) = init {
+                                interp.exec(s, &env, true)?;
+                            }
+                            self.push(Frame::CFor {
+                                cond: cond.clone(),
+                                step: step.clone(),
+                                body: body.clone(),
+                                started: false,
+                            });
+                        }
                         GStmt::Repeat { count, body } => {
                             let n = interp.eval(count, &env)?.as_int().unwrap_or(0);
                             self.push(Frame::Repeat {
@@ -558,6 +608,29 @@ impl Generator {
                         block: body,
                         idx: 0,
                     });
+                }
+                Frame::CFor {
+                    cond,
+                    step,
+                    body,
+                    started,
+                } => {
+                    if *started && let Some(st) = step {
+                        interp.eval(st, &env)?;
+                    }
+                    *started = true;
+                    let go = match cond {
+                        Some(c) => interp.eval(c, &env)?.truthy(),
+                        None => true,
+                    };
+                    if go {
+                        let body = body.clone();
+                        self.push(frame);
+                        self.push(Frame::Block {
+                            block: body,
+                            idx: 0,
+                        });
+                    }
                 }
                 Frame::Repeat { remaining, body } => {
                     if *remaining > 0 {
